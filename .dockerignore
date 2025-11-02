@@ -1,0 +1,39 @@
+# Ignore Python cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore virtual environments
+.venv/
+env/
+venv/
+
+# Ignore local results and logs
+result_log/
+*.log
+
+# Ignore wordlists (if mounted externally)
+wordlists/
+*.txt
+!requirements.txt
+# Ignore temporary or system files
+.DS_Store
+Thumbs.db
+
+# Ignore Git and IDE stuff
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# Ignore Docker and build artifacts
+*.bak
+*.tmp
+*.swp
+*.tar
+*.gz
+
+# Ignore test files and examples (optional)
+tests/
+examples/

@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+result_log/**/*.json
+!result_log/.gitkeep
+*.log
+.DS_Store
+.env
