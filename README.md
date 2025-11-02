@@ -51,18 +51,16 @@ python main.py
 
 Once running, the API will be available at `http://localhost:8000`
 
-**View API documentation:**
-```
-http://localhost:8000/docs
-```
-
 ### Basic Scan
 ```bash
 curl -X POST http://localhost:8000/scan \
   -H "Content-Type: application/json" \
   -d '{
     "target": "http://testphp.vulnweb.com/",
-    "wordlist_path_1": "/usr/share/seclists/Discovery/Web-Content/common.txt"
+    "wordlist": "/usr/share/seclists/Discovery/Web-Content/common.txt", 
+    "wordlist_2" : "",
+    "json_file_path" : "recon_logs",
+    "json_file_name" : "scan_logs.json"
   }'
 ```
 
