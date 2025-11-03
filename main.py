@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from core_scanner.main_scanner import ScanDataArrangement
 # from datetime import datetime
-
+import uvicorn
 # Fix this class!
 class Target(BaseModel):  # ← Need to inherit from BaseModel!
     target: str
@@ -20,7 +20,7 @@ def home():
         "Scanner name": "ReconSage V1.0",
         "Message": "Your scanner is working now lets start",
         "API Endpoints": "/scan POST",
-        "Note": "this is one endpoint but lets be real we can make this even more powerful" 
+        "Note": "this is one endpoint but lets be real we can make this even more powerful"
     }
 
 @app.post("/scan")
@@ -35,3 +35,6 @@ async def scan_target(target:Target):
     results = await scanner.scanner()
     return results
 
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
