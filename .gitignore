@@ -11,4 +11,3 @@ result_log/**/*.json
 .env
 *.md
 !README.md
-dns_scanner.py

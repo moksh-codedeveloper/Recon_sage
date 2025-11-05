@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-from core_scanner.main_scanner import ScanDataArrangement
+# from core_scanner.main_scanner import ScanDataArrangement
 # from datetime import datetime
 import uvicorn
 # Fix this class!
@@ -23,18 +23,18 @@ def home():
         "Note": "this is one endpoint but lets be real we can make this even more powerful"
     }
 
-@app.post("/scan")
-async def scan_target(target:Target):
-    scanner = ScanDataArrangement(
-        target=target.target,
-        wordlist_path_1=target.wordlist,
-        wordlist_path_2=target.wordlist_2,
-        json_file_path=target.json_file_path,
-        json_file_name=target.json_file_name
-    )
-    results = await scanner.scanner()
-    return results
+# @app.post("/scan")
+# async def scan_target(target:Target):
+#     scanner = ScanDataArrangement(
+#         target=target.target,
+#         wordlist_path_1=target.wordlist,
+#         wordlist_path_2=target.wordlist_2,
+#         json_file_path=target.json_file_path,
+#         json_file_name=target.json_file_name
+#     )
+#     results = await scanner.scanner()
+#     return results
 
 
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+# if __name__ == "__main__":
+#     uvicorn.run(app, host="0.0.0.0", port=8000)
