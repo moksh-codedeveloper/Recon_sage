@@ -4,7 +4,7 @@ import asyncio
 from .json_logger import JSONLogger
 
 class Scanner:
-    def __init__(self, target, wordlist_1, wordlist_2, json_file_name, json_file_path):
+    def __init__(self, target:str, wordlist_1:str, wordlist_2:str, json_file_name:str, json_file_path:str):
         self.target = target
         self.wordlist_1 = wordlist_1
         self.wordlist_2 = wordlist_2
@@ -123,3 +123,6 @@ class Scanner:
             "unexpected_errors": some_unexpected_errors,
             "status": 200
         }
+    
+    def false_positives(self, status_codes_logs, client_error_codes_logs):
+        pass
