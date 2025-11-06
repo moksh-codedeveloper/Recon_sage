@@ -1,6 +1,7 @@
 import datetime
 import json
 import os
+from pathlib import Path
 import httpx
 import asyncio
 from .json_logger import JSONLogger
@@ -111,7 +112,6 @@ class Scanner:
         redirect_logger.log_to_file(target_redirect_codes_records)
         server_error_logger.log_to_file(target_server_errors_codes)
         success_logger.log_to_file(target_successful_codes_records)
-        fp_analysis = self.false_positives()
         return {
             "message": "Scan complete! Check JSON logs for details.",
             "summary": {
@@ -124,21 +124,21 @@ class Scanner:
             },
             "unexpected_errors": some_unexpected_errors,
             "status": 200,
-            "false_positive analysis": fp_analysis
         }
     def false_positives(self):
         
-        # Load successful results
-        full_path = os.path.join(self.json_file_path, self.json_file_name)
-        try:
-            with open(full_path, "r", encoding='utf-8') as f:
-                success_logs = json.load(f)
-        except FileNotFoundError:
+            # Reconstruct actual JSON path using JSONLogger's logic
+        logger = JSONLogger(self.json_file_path, self.json_file_name)
+        full_path = Path(logger.filepath)  # THIS is the real file location
+
+        if not full_path.exists():
             return {
-                "error": "Success log file not found. Run scan first!",
+                "error": f"Success log file not found at {full_path}",
                 "status": 404
             }
-        
+
+        with open(full_path, "r", encoding='utf-8') as f:
+            success_logs = json.load(f)
         # Group by content length
         length_map = {}
         for url, data in success_logs.items():
