@@ -126,69 +126,111 @@ class Scanner:
             "status": 200
         }
     def false_positives(self):
+        
+        # Load successful results
         full_path = os.path.join(self.json_file_path, self.json_file_name)
         try:
             with open(full_path, "r", encoding='utf-8') as f:
                 success_logs = json.load(f)
-        except FileNotFoundError as e:
-          print("file not found exception")
-        lenght_map = {}
+        except FileNotFoundError:
+            return {
+                "error": "Success log file not found. Run scan first!",
+                "status": 404
+            }
+        
+        # Group by content length
+        length_map = {}
         for url, data in success_logs.items():
             length = data["content_length"]
-            if length not in lenght_map:
-                lenght_map[length] = []
-            
-            lenght_map[length].append(url)
-        urls_passed_all_test = []
+            if length not in length_map:
+                length_map[length] = []
+            length_map[length].append(url)
+        
+        # Analyze patterns
         false_positives_data = []
-        for length, urls in lenght_map.items() :
-            if len(url) > 5:
+        urls_passed_all_tests = []
+        
+        for length, urls in length_map.items():
+            # Pattern 1: Many URLs with identical length
+            if len(urls) > 5:  # ← FIXED: Check count of URLs
                 for url in urls:
                     false_positives_data.append({
-                        "url" : url,
-                        "reason" : "content_length_same",
-                        "length" : length,
-                        "pattern_counts" : len(urls),
-                        "fake_positive_probability": "medium"
-                    })
-            elif length < 100 :
-                for url in urls:
-                    false_positives_data.append({
-                        "url" : url,
-                        "reason" : "response_is_too_small",
-                        "length" : length,
-                        "fake_positive_probability": "low"
-                    })
-            elif length > 1500:
-                for url in urls:
-                    false_positives_data.append({
-                        "url" : url,
-                        "reason" : "response is too big",
-                        "length" : length,
-                        "fake_positive_possibility" : "low"
+                        "url": url,
+                        "reason": "identical_content_length",
+                        "content_length": length,
+                        "pattern_count": len(urls),
+                        "confidence": "medium"
                     })
             
-            else :
+            # Pattern 2: Suspiciously small response
+            elif length < 100:
                 for url in urls:
-                    urls_passed_all_test.append({
-                        "url" : url,
-                        "length" : length,
-                        "fake_positive_chances" : "still consider for the another advance tests if this is still not much for you"
+                    false_positives_data.append({
+                        "url": url,
+                        "reason": "suspiciously_small_response",
+                        "content_length": length,
+                        "confidence": "low"
                     })
-            timestamps = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            fp_log_file_name = f"fp_logger{timestamps}.json"
-            fp_logger = JSONLogger(self.json_file_path, name=fp_log_file_name)
-            passed_urls_file_name = f"passed_urls_{timestamps}.json"
-            passed_url_logger = JSONLogger(self.json_file_path, passed_urls_file_name)
-            fp_logger.log_to_file(false_positives_data)
-            passed_url_logger.log_to_file(urls_passed_all_test)
-            return {
-                "passed_urls_json_file_name" : passed_urls_file_name,
-                "fp_file_name" : fp_log_file_name,
-                "message" : "please use the names of the fp_log_file_names in the advance scanner too for it will be very useful applys for the passed urls too maybe they can be still suspicious",
-                "summary" : {
-                    "len_fp_logs" : len(false_positives_data), 
-                    "passed_urls" : len(urls_passed_all_test),
-                    "lengths_map" : len(lenght_map)
-                }
-            }
+            
+            # Pattern 3: Suspiciously large response
+            elif length > 50000:  # 50KB threshold (was 1500, too low!)
+                for url in urls:
+                    false_positives_data.append({
+                        "url": url,
+                        "reason": "suspiciously_large_response",
+                        "content_length": length,
+                        "confidence": "low"
+                    })
+            
+            # Passed all tests
+            else:
+                for url in urls:
+                    urls_passed_all_tests.append({
+                        "url": url,
+                        "content_length": length,
+                        "confidence": "high",
+                        "note": "Passed basic false positive checks"
+                    })
+        
+        # NOW create loggers ONCE (outside loop!)
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        
+        fp_log_file_name = f"false_positives_{timestamp}.json"
+        passed_urls_file_name = f"verified_finds_{timestamp}.json"
+        
+        fp_logger = JSONLogger(self.json_file_path, fp_log_file_name)
+        passed_logger = JSONLogger(self.json_file_path, passed_urls_file_name)
+        
+        # Write logs ONCE
+        fp_logger.log_to_file(false_positives_data)
+        passed_logger.log_to_file(urls_passed_all_tests)
+        
+        # Calculate ratio
+        total = len(success_logs)
+        fp_count = len(false_positives_data)
+        verified_count = len(urls_passed_all_tests)
+        fp_ratio = fp_count / total if total > 0 else 0
+        
+        # Warning based on ratio
+        warning = None
+        if fp_ratio > 0.7:
+            warning = "⚠️ Very high false positive rate! Review results carefully."
+        elif fp_ratio > 0.5:
+            warning = "⚠️ High false positive rate detected."
+        
+        return {
+            "message": "False positive analysis complete!",
+            "files": {
+                "false_positives": fp_log_file_name,
+                "verified_finds": passed_urls_file_name
+            },
+            "summary": {
+                "total_successful": total,
+                "likely_false_positives": fp_count,
+                "verified_finds": verified_count,
+                "unique_content_lengths": len(length_map),
+                "false_positive_ratio": round(fp_ratio, 2)
+            },
+            "warning": warning,
+            "status": 200
+        }
