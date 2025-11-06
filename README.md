@@ -1,264 +1,198 @@
-# Recon_sage 🔍⚡
+# ReconSage
 
-Fast async directory enumeration tool for bug bounty hunters and penetration testers.
+![Version](https://img.shields.io/badge/version-1.1.5-blue)
+![Python](https://img.shields.io/badge/python-3.11-green)
+![Docker pulls](https://img.shields.io/badge/docker%20pulls-50+-orange)
 
-![Version](https://img.shields.io/badge/version-v1.1.3-blue)
-![Python](https://img.shields.io/badge/python-3.11+-green)
-![License](https://img.shields.io/badge/license-MIT-orange)
-![Docker](https://img.shields.io/badge/docker-ready-brightgreen)
-
----
-
-## Overview
-
-Recon_sage is an async directory enumeration scanner built with **FastAPI + httpx**.
-It’s designed to be fast, configurable, and Docker-friendly. The repo now standardizes where logs and wordlists live inside the container and exposes safe environment variables so the tool behaves consistently on Linux, Windows and macOS.
+A fast, opinionated asynchronous directory/subdomain enumerator and HTTP recon tool built with FastAPI + httpx. Designed for **authorized security testing**, ReconSage focuses on speed, simple JSON logs and post-scan false-positive heuristics.
 
 ---
 
-## Key changes (v1.1.3)
+## Legal & Ethical Notice
 
-* `JSONLogger` now respects `LOG_DIR` and falls back safely if not writable.
-* Container runs as **non-root** and writes logs to `/app/result_log` by default.
-* `main_scanner` resolves wordlists via optional `WORDLIST_DIR`.
-* `docker-compose` examples for Linux and Windows included.
-* API now returns absolute container log paths (which map to host mounts).
-* Removed generated logs from repo and added `.gitignore` guidance.
+**Only run ReconSage against systems you own or have explicit, written permission to test.** Using this tool against third-party systems without authorization is illegal and unethical. The author and contributors are not responsible for misuse.
+
+Include this in your engagement paperwork and follow your target's scope, rate limits, and disclosure rules.
 
 ---
 
-## Quick concepts
+## Features
 
-* **Container-internal paths:** `/app/result_log` (logs) and `/usr/share/seclists` (wordlists).
-* **Host mapping:** you mount host folders into these container paths; container writes to `/app/result_log` and those files persist on host.
-* **Networking:**
-
-  * On **Linux** you can use `--network host` (container sees host `localhost`).
-  * On **Windows/macOS** use bridge networking and `host.docker.internal` as the target host address.
-
----
-
-## Environment variables
-
-* `LOG_DIR` — (preferred) absolute path inside container where logs are written (default: `/app/result_log` in image).
-* `WORDLIST_DIR` — optional base path inside container for resolving relative wordlist names (e.g. `/usr/share/seclists`).
-* `DEFAULT_TARGET` — optional default target used by your app if you choose to use it.
-* `RECONSAGE_ALLOW_ABSOLUTE=1` — optional; allows JSONLogger to respect absolute `json_file_path` from caller (use carefully).
+* Asynchronous HTTP requests using `httpx.AsyncClient` with semaphore throttling
+* Pluggable wordlist support (compatible with SecLists layout)
+* JSON output logs stored under `~/reconsage_logs/<folder>/`
+* The logs of output contains the logs of errors redirects and server errors from the target and also contains the False Positive output which target scan generated while scanning this are all stored under one path same as where other logs are stored too
+* Basic false-positive analysis (content-length patterns)
+* Container-friendly: run via Docker / docker-compose
+* Minimal, audit-friendly codebase (single-file scanner core)
 
 ---
 
-## Install & Run
+## Quickstart (Docker + Compose)
 
-### 1) Build (if you build locally)
+**Recommended**: use docker-compose to mount host wordlists and persist logs.
+
+1. Set host environment variables (Linux / macOS):
 
 ```bash
-# from repo root
-docker build -t mokshmalde/reconsage:local .
+export WORDLISTS=/usr/share/seclists   # path where you keep SecLists on host
+export LOGS=$HOME/reconsage_logs       # where logs will be stored on host
 ```
 
-### 2) Run — pick one (Linux or cross-platform)
-
-#### Linux (recommended for local testing; allows using `http://localhost:3000` as target)
-
-```bash
-mkdir -p ~/reconsage_logs
-docker run --rm -it --network host \
-  -v /usr/share/seclists:/usr/share/seclists:ro \
-  -v ~/reconsage_logs:/app/result_log \
-  -e LOG_DIR=/app/result_log \
-  mokshmalde/reconsage:local
-```
-
-* **Note:** when using `--network host` you should *not* use `-p` (it's ignored). Use `http://localhost:3000/` as scan `target`.
-
-#### Cross-platform (Windows / macOS / Linux bridge)
-
-```bash
-mkdir -p ~/reconsage_logs
-docker run --rm -it -p 8000:8000 \
-  -v /usr/share/seclists:/usr/share/seclists:ro \
-  -v ~/reconsage_logs:/app/result_log \
-  -e LOG_DIR=/app/result_log \
-  mokshmalde/reconsage:local
-```
-
-* Use `http://host.docker.internal:3000/` as `target` when calling the scan endpoint from inside container run with bridge networking (Windows or Docker Desktop).
-
----
-
-## docker-compose (Linux/macOS)
-
-`docker-compose.yml` (for most Linux/macOS use):
-
-```yaml
-version: "3.9"
-services:
-  reconsage:
-    image: mokshmalde/reconsage:v1.1.3
-    container_name: reconsage
-    restart: unless-stopped
-    ports:
-      - "8000:8000"
-    environment:
-      LOG_DIR: /app/result_log
-      WORDLIST_DIR: /usr/share/seclists
-      DEFAULT_TARGET: http://host.docker.internal:3000/
-    volumes:
-      - ./reconsage_logs:/app/result_log
-      - /usr/share/seclists:/usr/share/seclists:ro
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-```
-
-Run:
+2. Start the service:
 
 ```bash
 docker compose up -d
 ```
 
+3. Test the API (example):
+
+```bash
+curl -X POST http://localhost:8000/api/v1/scan \
+  -H "Content-Type: application/json" \
+  -d '{
+    "target":"http://target.com/",
+    "wordlist":"/wordlists/Fuzzing/fuzz-Bo0oM-friendly.txt",
+    "wordlist_2":"/wordlists/Fuzzing/fuzz-Bo0oM.txt",
+    "json_file_path":"quicktest",
+    "json_file_name":"scan.json"
+  }'
+```
 ---
 
-## docker-compose.windows.yml (Windows)
+## Run without Docker (local virtualenv)
 
-`docker-compose.windows.yml`:
+1. Create and activate a virtualenv:
 
-```yaml
-version: "3.9"
-services:
-  reconsage:
-    image: mokshmalde/reconsage:v1.1.3
-    container_name: reconsage
-    restart: unless-stopped
-    ports:
-      - "8000:8000"
-    environment:
-      LOG_DIR: /app/result_log
-      WORDLIST_DIR: /usr/share/seclists
-      DEFAULT_TARGET: http://host.docker.internal:3000/
-    volumes:
-      - ${WINDOWS_LOGS_PATH}:/app/result_log
-      - ${WINDOWS_WORDLISTS_PATH}:/usr/share/seclists:ro
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+```bash
+python -m venv .venv
+source .venv/bin/activate
 ```
 
-`.env.windows` (example — place next to compose file):
+2. Install dependencies:
 
+```bash
+pip install -r requirements.txt
 ```
-WINDOWS_LOGS_PATH=C:\Users\YourUser\reconsage_logs
-WINDOWS_WORDLISTS_PATH=C:\Users\YourUser\wordlists
-```
 
-Run:
+3. Run the app:
 
-```powershell
-docker compose -f docker-compose.windows.yml --env-file .env.windows up -d
+```bash
+uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 ---
 
-## API quick usage
+## API
 
-**Endpoint:** `POST /api/v1/scan`
-**Headers:** `Content-Type: application/json`
+### GET `/`
+**Response (JSON)** 
+```json
+{
+  "Scanner name":"ReconSage V1.0",
+  "Message":"Your scanner is working now lets start",
+  "API Endpoints":"/api/v1/scan POST",
+  "Note":"this is one endpoint but lets be real we can make this even more powerful"
+}
 
-Example body (use `host.docker.internal` on Windows/bridge, or `localhost` with `--network host`):
+```
+### POST `/api/v1/scan`
+
+**Body (JSON)**
 
 ```json
 {
-  "target": "http://host.docker.internal:3000/",
-  "wordlist_1": "Fuzzing/fuzz-Bo0oM-friendly.txt",
-  "wordlist_2": "Fuzzing/fuzz-Bo0oM.txt",
-  "json_file_path": "app_test_logs",
-  "json_file_name": "app_real_target.json"
+  "target": "http://localhost:3000/",
+  "wordlist": "/path/to/wordlist", 
+  "wordlist_2": "/path/to/wordlist",
+  "json_file_path": "folder_name_where_you_want_to_save_the_json_logs",
+  "json_file_name": "file_name.json"
 }
 ```
 
-* If `WORDLIST_DIR` is set (e.g. `/usr/share/seclists`), you can pass relative names like `Fuzzing/...` and `main_scanner` will resolve them.
+**Response**: JSON object with `summary`, `files` (absolute paths inside container), `false_positives` and `status`.
 
-**Response:** includes `files.success_log` etc. — paths inside the container (e.g. `/app/result_log/app_real_target.json`) which map to your mounted host folder.
+**Examples**: I have a Seclist and from that i have choosed to use the Fuzzing directory and here is how it should look in yours too 
 
----
-
-## Post-run checks & common problems
-
-* **No such wordlist** → make sure host's wordlist folder is mounted into container path you expect (`/usr/share/seclists`).
-* **All requests are exceptions (successful: 0)** → container cannot reach target. If using bridge network, switch to `host.docker.internal` (Windows/macOS) or use `--network host` on Linux.
-* **Logs still in /root/** → ensure container is started with `LOG_DIR=/app/result_log` and that the image uses non-root user (Dockerfile provided).
-* **Files accidentally committed to git** → remove them and add to `.gitignore` (commands below).
-
-### Remove committed logs from git (do this now if you committed logs)
-
-```bash
-git rm -r --cached app_test_logs || true
-echo "app_test_logs/" >> .gitignore
-echo "reconsage_logs/" >> .gitignore
-git add .gitignore
-git commit -m "chore: remove generated logs and ignore log folders"
-git push origin main
+```json
+{
+  "target": "http://localhost:3000/",
+  "wordlist": "/wordlists/Fuzzing/fuzz-Bo0oM-friendly.txt", 
+  "wordlist_2": "/wordlists/Fuzzing/fuzz-Bo0oM-friendly.txt",
+  "json_file_path": "quicktest",
+  "json_file_name": "scan.json"
+}
 ```
+---
 
-If you need to purge them from history, use `git filter-branch` or `git filter-repo` (I can provide commands).
+## Configuration / Environment
+
+* `WORDLISTS` (host) → mounted to `/wordlists` inside container (read-only)
+* `LOGS` (host) → mounted to `/home/appuser/reconsage_logs` inside container
+
+Tips:
+
+* Ensure the mounted `LOGS` directory has write permissions for the container user.
+* If your host path is different (Windows), set env vars before `docker compose up`.
 
 ---
 
-## Build & push (Docker Hub)
+## Where logs are written
 
-Tag and push:
+Logs are written to the user's home inside the container at:
 
-```bash
-# build locally
-docker build -t mokshmalde/reconsage:local .
-
-# tag for release
-docker tag mokshmalde/reconsage:local mokshmalde/reconsage:v1.1.3
-
-# login & push
-docker login -u <your-docker-username>
-docker push mokshmalde/reconsage:v1.1.3
-
-# optional: push latest
-docker tag mokshmalde/reconsage:v1.1.3 mokshmalde/reconsage:latest
-docker push mokshmalde/reconsage:latest
 ```
+/home/appuser/reconsage_logs/<json_file_path>/<json_file_name>
+```
+When you mount `LOGS` on the host, they will land in your host folder (e.g. `./reconsage_logs/<json_file_path>/`).
+
+```
+/home/<USERNAME>/reconsage_logs/<json_file_path>/<json_file_name>
+```
+The logs containing this much of files :- 
+```
+client_errors_{timestamp}.json
+redirects_{timestamp}.json
+server_errors_{timestamp}.json
+```
+---
+
+## Troubleshooting
+
+* **No wordlists found**: ensure the host `WORDLISTS` directory contains the requested files and is mounted at `/wordlists`.
+* **Logs missing on host**: ensure `LOGS` was mounted to `/home/appuser/reconsage_logs` and check permissions.
+* **Permission denied writing logs**: adjust owner (e.g. `chown -R 1000:1000 $LOGS`) or give writable permissions.
 
 ---
 
-## Security & production notes
+## Responsible disclosure / safe defaults
 
-* **Rate limit & auth:** add API key or JWT to `/scan` for public deployment. Consider `slowapi` or a reverse-proxy to enforce rate limits.
-* **Non-root in container:** Dockerfile sets a non-root user — keep that. If you mount a host dir, ensure appropriate permissions or use an entrypoint to `chown` mounted dir at start (careful with security).
-* **Avoid `--network host` in multi-tenant or cloud environments.** Bridge network + `host.docker.internal` is safer and portable.
-* **Legal:** only scan targets you are authorized to test.
+* Default semaphore is set to 100 concurrent requests. Adjust in `main_scanner.py` to match target rules.
+* Respect target rate limits and schedule scans in a way that won't disrupt services.
+* Include a README section in any engagement packet that documents scan targets, windows, and safety checks.
+
+---
+## Contribution
+
+1. Fork the repo
+2. Create a feature branch
+3. Open a PR which has meaningful features suggestion , bugs fixes in code 
+4. Else your PR will be canceled from the section 
+5. You can raise issue in the GitHub if you find any issues while using the scanner in its any part of it 
+
+Please open issues for bugs or feature requests. Be explicit about test cases and include sample payloads where possible.
 
 ---
 
-## Roadmap
+## LICENSE
 
-* Wildcard detection improvements
-* DNS validation & MX checks
-* Web UI dashboard + streaming results
-* Multi-target / queueing with Redis/Celery or RQ
-* Export to CSV/HTML and report generation
-* Windows-friendly Docker image tests & CI
+MIT — see LICENSE file.
 
 ---
 
-## Contributing
-
-1. Fork
-2. Create feature branch
-3. Add tests where appropriate (esp. path resolution tests)
-4. Open PR
+## Credits
+* Coffee & Laptop with the Arch Linux 
+* Built with `FastAPI`, `httpx` and `uvicorn`.
+* Leveraging SecLists format (if you choose to include them) — [https://github.com/danielmiessler/SecLists](https://github.com/danielmiessler/SecLists)
 
 ---
-
-## License
-
-MIT — see `LICENSE`.
-
----
-
-## Author
-
-**Moksh Malde** — security tinkerer, bug bounty enthusiast.
