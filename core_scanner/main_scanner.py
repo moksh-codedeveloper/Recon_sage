@@ -59,7 +59,7 @@ class Scanner:
         for codes, url, message in results:
             if codes is None:
                 some_unexpected_errors[url] = {
-                    "status_code": codes,
+                    "status_code": None,
                     "error": message
                 }
             elif 200 <= codes < 300:
@@ -124,5 +124,5 @@ class Scanner:
             "status": 200
         }
     
-    def false_positives(self, status_codes_logs, client_error_codes_logs):
+    def false_positives(self, success_codes_log, client_error_codes_logs, server_error_codes_logs, redirect_code_logs):
         pass
