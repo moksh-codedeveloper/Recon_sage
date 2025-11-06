@@ -2,291 +2,263 @@
 
 Fast async directory enumeration tool for bug bounty hunters and penetration testers.
 
-![Version](https://img.shields.io/badge/version-1.0.1-blue)
+![Version](https://img.shields.io/badge/version-v1.1.3-blue)
 ![Python](https://img.shields.io/badge/python-3.11+-green)
 ![License](https://img.shields.io/badge/license-MIT-orange)
 ![Docker](https://img.shields.io/badge/docker-ready-brightgreen)
 
-## 🚀 Features
+---
 
-- ⚡ **Blazing Fast** - 50+ requests/second with async HTTP
-- 🐳 **Docker Ready** - One command deployment
-- 🎯 **Flexible** - Configurable wordlists and output paths
-- 📊 **JSON Logging** - Structured output for easy parsing
-- 🔒 **Rate Limiting** - Semaphore-based concurrency control (100 concurrent)
-- 💪 **Production Ready** - Built with FastAPI and httpx
+## Overview
 
-## 📦 Installation
-
-### Using Docker (Linux - Recommended)
-```bash
-docker run -d --name reconsage \
-  --network host \
-  -v /usr/share/seclists:/usr/share/seclists:ro \
-  -v ~/recon_logs:/app/result_log \
-  mokshmalde/reconsage:v1.0.1
-```
-
-**What this does:**
-- Uses host network for better performance
-- Mounts SecLists wordlists (read-only)
-- Saves results to `~/recon_logs` on your machine
-
-### Local Installation (Windows/Linux/Mac)
-```bash
-# Clone repository
-git clone https://github.com/YOUR_USERNAME/ReconSage.git
-cd ReconSage
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run
-python main.py
-```
-
-## 🎯 Usage
-
-### Quick Start
-
-Once running, the API will be available at `http://localhost:8000`
-
-### Basic Scan
-```bash
-curl -X POST http://localhost:8000/scan \
-  -H "Content-Type: application/json" \
-  -d '{
-    "target": "http://testphp.vulnweb.com/",
-    "wordlist": "/usr/share/seclists/Discovery/Web-Content/common.txt", 
-    "wordlist_2" : "",
-    "json_file_path" : "recon_logs",
-    "json_file_name" : "scan_logs.json"
-  }'
-```
-
-### Advanced Scan (Two Wordlists)
-```bash
-curl -X POST http://localhost:8000/scan \
-  -H "Content-Type: application/json" \
-  -d '{
-    "target": "http://example.com/",
-    "wordlist_path_1": "/usr/share/seclists/Discovery/Web-Content/common.txt",
-    "wordlist_path_2": "/usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt",
-    "output_subfolder": "my_scans",
-    "output_filename": "scan_results"
-  }'
-```
-
-### Using Postman
-
-1. **Method:** POST
-2. **URL:** `http://localhost:8000/scan`
-3. **Headers:** `Content-Type: application/json`
-4. **Body (JSON):**
-```json
-{
-  "target": "http://localhost:3000/",
-  "wordlist": "/usr/share/seclists/Discovery/Web-Content/common.txt",
-  "wordlist_2" : "<Optional If you have then pass>",
-  "output_file_path" : "/path/to/file_name",
-  "output_file_name" : "file_name.json"
-}
-```
-
-## 📊 API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/` | GET | API information and status |
-| `/scan` | POST | Start directory enumeration scan |
-
-## 🔧 Configuration
-
-### Scan Parameters
-
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `target` | string | ✅ Yes | - | Target URL (must include http:// or https://) |
-| `wordlist_path_1` | string | ✅ Yes | - | Path to first wordlist |
-| `wordlist_path_2` | string | ❌ No | null | Path to second wordlist |
-| `output_subfolder` | string |✅ Yes | - | Path for results |
-| `output_filename` | string | ✅ Yes | - | Output filename With .json |
-
-### Response Format
-```json
-{
-    "message": "the result is as you can see here in the given lists",
-    "present_counts": 15,
-    "not_present_counts": 485,
-    "count_of_errors_that_came": 2,
-    "timestamps": "2024-11-01_20-30-45"
-}
-```
-
-## 🐳 Docker Guide
-
-### Pull Image
-```bash
-docker pull mokshmalde/reconsage:v1.0.1
-```
-
-### Run Container
-
-**Linux (with SecLists):**
-```bash
-docker run -d --name reconsage \
-  --network host \
-  -v /usr/share/seclists:/usr/share/seclists:ro \
-  -v ~/recon_logs:/app/result_log \
-  mokshmalde/reconsage:v1.0.1
-```
-
-**Without SecLists (use your own wordlists):**
-```bash
-docker run -d --name reconsage \
-  --network host \
-  -v /path/to/wordlists:/wordlists:ro \
-  -v /path/to/logs:/app/result_log \
-  mokshmalde/reconsage:v1.0.1
-```
-
-### View Logs
-```bash
-docker logs -f reconsage
-```
-
-### Stop Container
-```bash
-docker stop reconsage
-docker rm reconsage
-```
-
-## 📈 Performance
-
-- **Speed:** 50-100 requests/second
-- **Concurrency:** 100 simultaneous connections
-- **Efficiency:** ~5,800 URLs scanned in ~2 minutes
-- **Comparison:** Comparable to Gobuster, faster than Dirb
-
-### Benchmark Example
-
-**Test:** 5,842 URLs against `http://localhost:3000/`
-- **Time:** 1 minute 49 seconds
-- **Speed:** ~53 requests/second
-- **Memory:** ~50MB
-- **CPU:** Low usage (async I/O)
-
-## 🛠️ Requirements
-
-### For Docker
-- Docker installed
-- 50MB disk space
-- Network access
-
-### For Local Installation
-- Python 3.11+
-- pip
-- Dependencies:
-  - fastapi
-  - uvicorn
-  - httpx
-  - pydantic
-
-## 📝 Example Output
-
-**Terminal response: (example)**
-```json
-{
-    "present_counts": 12,
-    "not_present_counts": 388,
-    "count_of_errors_that_came" : 2,
-    "timestamps": "2024-11-01_20-15-30"
-}
-```
-
-**JSON log file** (`~/recon_logs/scans/scan_20241101_201530.json`):
-```json
-{
-  "message": "comprehensive list of targets",
-  "present targets": [
-    "http://testphp.vulnweb.com/admin",
-    "http://testphp.vulnweb.com/login",
-    "http://testphp.vulnweb.com/images"
-  ],
-  "not present targets": [...],
-  "errors_that_came": [],
-  "timestamps": "2024-11-01_20-15-30"
-}
-```
-
-## 🚨 Important Notes
-
-### Legal Usage
-⚠️ **Only scan targets you have permission to test!**
-
-Use only on:
-- Your own systems
-- Bug bounty programs
-- Authorized penetration tests
-- Legal test environments (testphp.vulnweb.com, etc.)
-
-### Rate Limiting
-The tool uses semaphore-based rate limiting (100 concurrent). Adjust in code if needed:
-```python
-sem = asyncio.Semaphore(100)  # Change value
-```
-
-## 🗺️ Roadmap
-
-Planned features for future releases:
-
-- [ ] Wildcard detection (v1.1.0)
-- [ ] DNS validation
-- [ ] False positive filtering
-- [ ] Web UI dashboard
-- [ ] Multi-target scanning
-- [ ] Custom headers support
-- [ ] Authentication methods
-- [ ] Export formats (CSV, XML)
-- [ ] Windows-specific Docker image
-- [ ] Integration with other tools
-
-## 🤝 Contributing
-
-Contributions welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## 📜 License
-
-MIT License - see [LICENSE](LICENSE) file for details.
-
-## 👨‍💻 Author
-
-**Built by Moksh Malde**
-- 18-year-old security enthusiast
-- Living the unscripted polymath life
-- Passionate about bug bounty and offensive security
-
-## 🙏 Acknowledgments
-
-- FastAPI for the amazing framework
-- httpx for async HTTP capabilities
-- The bug bounty community for inspiration
-- SecLists for comprehensive wordlists
-
-## ⭐ Show Your Support
-
-If you find this tool useful, please consider:
-- ⭐ Starring the repository
-- 🐛 Reporting bugs
-- 💡 Suggesting features
-- 📢 Sharing with the community
+Recon_sage is an async directory enumeration scanner built with **FastAPI + httpx**.
+It’s designed to be fast, configurable, and Docker-friendly. The repo now standardizes where logs and wordlists live inside the container and exposes safe environment variables so the tool behaves consistently on Linux, Windows and macOS.
 
 ---
 
-**Made with ❤️ and lots of ☕ by a passionate 18-year-old hacker**
+## Key changes (v1.1.3)
+
+* `JSONLogger` now respects `LOG_DIR` and falls back safely if not writable.
+* Container runs as **non-root** and writes logs to `/app/result_log` by default.
+* `main_scanner` resolves wordlists via optional `WORDLIST_DIR`.
+* `docker-compose` examples for Linux and Windows included.
+* API now returns absolute container log paths (which map to host mounts).
+* Removed generated logs from repo and added `.gitignore` guidance.
+
+---
+
+## Quick concepts
+
+* **Container-internal paths:** `/app/result_log` (logs) and `/usr/share/seclists` (wordlists).
+* **Host mapping:** you mount host folders into these container paths; container writes to `/app/result_log` and those files persist on host.
+* **Networking:**
+
+  * On **Linux** you can use `--network host` (container sees host `localhost`).
+  * On **Windows/macOS** use bridge networking and `host.docker.internal` as the target host address.
+
+---
+
+## Environment variables
+
+* `LOG_DIR` — (preferred) absolute path inside container where logs are written (default: `/app/result_log` in image).
+* `WORDLIST_DIR` — optional base path inside container for resolving relative wordlist names (e.g. `/usr/share/seclists`).
+* `DEFAULT_TARGET` — optional default target used by your app if you choose to use it.
+* `RECONSAGE_ALLOW_ABSOLUTE=1` — optional; allows JSONLogger to respect absolute `json_file_path` from caller (use carefully).
+
+---
+
+## Install & Run
+
+### 1) Build (if you build locally)
+
+```bash
+# from repo root
+docker build -t mokshmalde/reconsage:local .
+```
+
+### 2) Run — pick one (Linux or cross-platform)
+
+#### Linux (recommended for local testing; allows using `http://localhost:3000` as target)
+
+```bash
+mkdir -p ~/reconsage_logs
+docker run --rm -it --network host \
+  -v /usr/share/seclists:/usr/share/seclists:ro \
+  -v ~/reconsage_logs:/app/result_log \
+  -e LOG_DIR=/app/result_log \
+  mokshmalde/reconsage:local
+```
+
+* **Note:** when using `--network host` you should *not* use `-p` (it's ignored). Use `http://localhost:3000/` as scan `target`.
+
+#### Cross-platform (Windows / macOS / Linux bridge)
+
+```bash
+mkdir -p ~/reconsage_logs
+docker run --rm -it -p 8000:8000 \
+  -v /usr/share/seclists:/usr/share/seclists:ro \
+  -v ~/reconsage_logs:/app/result_log \
+  -e LOG_DIR=/app/result_log \
+  mokshmalde/reconsage:local
+```
+
+* Use `http://host.docker.internal:3000/` as `target` when calling the scan endpoint from inside container run with bridge networking (Windows or Docker Desktop).
+
+---
+
+## docker-compose (Linux/macOS)
+
+`docker-compose.yml` (for most Linux/macOS use):
+
+```yaml
+version: "3.9"
+services:
+  reconsage:
+    image: mokshmalde/reconsage:v1.1.3
+    container_name: reconsage
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      LOG_DIR: /app/result_log
+      WORDLIST_DIR: /usr/share/seclists
+      DEFAULT_TARGET: http://host.docker.internal:3000/
+    volumes:
+      - ./reconsage_logs:/app/result_log
+      - /usr/share/seclists:/usr/share/seclists:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+```
+
+Run:
+
+```bash
+docker compose up -d
+```
+
+---
+
+## docker-compose.windows.yml (Windows)
+
+`docker-compose.windows.yml`:
+
+```yaml
+version: "3.9"
+services:
+  reconsage:
+    image: mokshmalde/reconsage:v1.1.3
+    container_name: reconsage
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      LOG_DIR: /app/result_log
+      WORDLIST_DIR: /usr/share/seclists
+      DEFAULT_TARGET: http://host.docker.internal:3000/
+    volumes:
+      - ${WINDOWS_LOGS_PATH}:/app/result_log
+      - ${WINDOWS_WORDLISTS_PATH}:/usr/share/seclists:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+```
+
+`.env.windows` (example — place next to compose file):
+
+```
+WINDOWS_LOGS_PATH=C:\Users\YourUser\reconsage_logs
+WINDOWS_WORDLISTS_PATH=C:\Users\YourUser\wordlists
+```
+
+Run:
+
+```powershell
+docker compose -f docker-compose.windows.yml --env-file .env.windows up -d
+```
+
+---
+
+## API quick usage
+
+**Endpoint:** `POST /api/v1/scan`
+**Headers:** `Content-Type: application/json`
+
+Example body (use `host.docker.internal` on Windows/bridge, or `localhost` with `--network host`):
+
+```json
+{
+  "target": "http://host.docker.internal:3000/",
+  "wordlist_1": "Fuzzing/fuzz-Bo0oM-friendly.txt",
+  "wordlist_2": "Fuzzing/fuzz-Bo0oM.txt",
+  "json_file_path": "app_test_logs",
+  "json_file_name": "app_real_target.json"
+}
+```
+
+* If `WORDLIST_DIR` is set (e.g. `/usr/share/seclists`), you can pass relative names like `Fuzzing/...` and `main_scanner` will resolve them.
+
+**Response:** includes `files.success_log` etc. — paths inside the container (e.g. `/app/result_log/app_real_target.json`) which map to your mounted host folder.
+
+---
+
+## Post-run checks & common problems
+
+* **No such wordlist** → make sure host's wordlist folder is mounted into container path you expect (`/usr/share/seclists`).
+* **All requests are exceptions (successful: 0)** → container cannot reach target. If using bridge network, switch to `host.docker.internal` (Windows/macOS) or use `--network host` on Linux.
+* **Logs still in /root/** → ensure container is started with `LOG_DIR=/app/result_log` and that the image uses non-root user (Dockerfile provided).
+* **Files accidentally committed to git** → remove them and add to `.gitignore` (commands below).
+
+### Remove committed logs from git (do this now if you committed logs)
+
+```bash
+git rm -r --cached app_test_logs || true
+echo "app_test_logs/" >> .gitignore
+echo "reconsage_logs/" >> .gitignore
+git add .gitignore
+git commit -m "chore: remove generated logs and ignore log folders"
+git push origin main
+```
+
+If you need to purge them from history, use `git filter-branch` or `git filter-repo` (I can provide commands).
+
+---
+
+## Build & push (Docker Hub)
+
+Tag and push:
+
+```bash
+# build locally
+docker build -t mokshmalde/reconsage:local .
+
+# tag for release
+docker tag mokshmalde/reconsage:local mokshmalde/reconsage:v1.1.3
+
+# login & push
+docker login -u <your-docker-username>
+docker push mokshmalde/reconsage:v1.1.3
+
+# optional: push latest
+docker tag mokshmalde/reconsage:v1.1.3 mokshmalde/reconsage:latest
+docker push mokshmalde/reconsage:latest
+```
+
+---
+
+## Security & production notes
+
+* **Rate limit & auth:** add API key or JWT to `/scan` for public deployment. Consider `slowapi` or a reverse-proxy to enforce rate limits.
+* **Non-root in container:** Dockerfile sets a non-root user — keep that. If you mount a host dir, ensure appropriate permissions or use an entrypoint to `chown` mounted dir at start (careful with security).
+* **Avoid `--network host` in multi-tenant or cloud environments.** Bridge network + `host.docker.internal` is safer and portable.
+* **Legal:** only scan targets you are authorized to test.
+
+---
+
+## Roadmap
+
+* Wildcard detection improvements
+* DNS validation & MX checks
+* Web UI dashboard + streaming results
+* Multi-target / queueing with Redis/Celery or RQ
+* Export to CSV/HTML and report generation
+* Windows-friendly Docker image tests & CI
+
+---
+
+## Contributing
+
+1. Fork
+2. Create feature branch
+3. Add tests where appropriate (esp. path resolution tests)
+4. Open PR
+
+---
+
+## License
+
+MIT — see `LICENSE`.
+
+---
+
+## Author
+
+**Moksh Malde** — security tinkerer, bug bounty enthusiast.
