@@ -19,7 +19,7 @@ def home():
     return {
         "Scanner name": "ReconSage V1.0",
         "Message": "Your scanner is working now lets start",
-        "API Endpoints": "/scan POST",
+        "API Endpoints": "/api/v1/scan POST",
         "Note": "this is one endpoint but lets be real we can make this even more powerful"
     }
 
