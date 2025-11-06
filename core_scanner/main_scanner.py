@@ -1,4 +1,6 @@
 import datetime
+import json
+import os
 import httpx
 import asyncio
 from .json_logger import JSONLogger
@@ -123,6 +125,70 @@ class Scanner:
             "unexpected_errors": some_unexpected_errors,
             "status": 200
         }
-    
-    def false_positives(self, success_codes_log, client_error_codes_logs, server_error_codes_logs, redirect_code_logs):
-        pass
+    def false_positives(self):
+        full_path = os.path.join(self.json_file_path, self.json_file_name)
+        try:
+            with open(full_path, "r", encoding='utf-8') as f:
+                success_logs = json.load(f)
+        except FileNotFoundError as e:
+          print("file not found exception")
+        lenght_map = {}
+        for url, data in success_logs.items():
+            length = data["content_length"]
+            if length not in lenght_map:
+                lenght_map[length] = []
+            
+            lenght_map[length].append(url)
+        urls_passed_all_test = []
+        false_positives_data = []
+        for length, urls in lenght_map.items() :
+            if len(url) > 5:
+                for url in urls:
+                    false_positives_data.append({
+                        "url" : url,
+                        "reason" : "content_length_same",
+                        "length" : length,
+                        "pattern_counts" : len(urls),
+                        "fake_positive_probability": "medium"
+                    })
+            elif length < 100 :
+                for url in urls:
+                    false_positives_data.append({
+                        "url" : url,
+                        "reason" : "response_is_too_small",
+                        "length" : length,
+                        "fake_positive_probability": "low"
+                    })
+            elif length > 1500:
+                for url in urls:
+                    false_positives_data.append({
+                        "url" : url,
+                        "reason" : "response is too big",
+                        "length" : length,
+                        "fake_positive_possibility" : "low"
+                    })
+            
+            else :
+                for url in urls:
+                    urls_passed_all_test.append({
+                        "url" : url,
+                        "length" : length,
+                        "fake_positive_chances" : "still consider for the another advance tests if this is still not much for you"
+                    })
+            timestamps = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            fp_log_file_name = f"fp_logger{timestamps}.json"
+            fp_logger = JSONLogger(self.json_file_path, name=fp_log_file_name)
+            passed_urls_file_name = f"passed_urls_{timestamps}.json"
+            passed_url_logger = JSONLogger(self.json_file_path, passed_urls_file_name)
+            fp_logger.log_to_file(false_positives_data)
+            passed_url_logger.log_to_file(urls_passed_all_test)
+            return {
+                "passed_urls_json_file_name" : passed_urls_file_name,
+                "fp_file_name" : fp_log_file_name,
+                "message" : "please use the names of the fp_log_file_names in the advance scanner too for it will be very useful applys for the passed urls too maybe they can be still suspicious",
+                "summary" : {
+                    "len_fp_logs" : len(false_positives_data), 
+                    "passed_urls" : len(urls_passed_all_test),
+                    "lengths_map" : len(lenght_map)
+                }
+            }
