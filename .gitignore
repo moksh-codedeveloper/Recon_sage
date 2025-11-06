@@ -10,5 +10,6 @@ result_log/**/*.json
 .DS_Store
 .env
 *.md
-!README.mdapp_test_logs/
+!README.md
+app_test_logs/
 reconsage_logs/

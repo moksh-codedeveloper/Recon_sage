@@ -1,0 +1,34 @@
+version: "3.9"
+
+services:
+  reconsage:
+    image: mokshmalde/reconsage:v1.1.3
+    container_name: reconsage
+    restart: unless-stopped
+
+    # port mapping (works Windows/Linux/macOS)
+    ports:
+      - "8000:8000"
+
+    # environment variables for cross-platform operation
+    environment:
+      # where logs go INSIDE container
+      LOG_DIR: /app/result_log
+
+      # optional: mount wordlists inside container at /wordlists
+      WORDLIST_DIR: /app/wordlists
+
+      # default target (can be changed in POST request)
+      DEFAULT_TARGET: http://host.docker.internal:3000/
+
+    volumes:
+      # WINDOWS USERS: change "path/to" to real Windows paths
+      - ./reconsage_logs:/app/result_log
+
+      # mount wordlists (Linux example)
+      # Windows: change to "C:/Users/you/wordlists:/app/wordlists:ro"
+      - /usr/share/seclists:/usr/share/seclists:ro
+
+    # ensures container can reach host machine cross-platform
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  reconsage:
+    image: mokshmalde/reconsage:v1.1.3
+    container_name: reconsage
+    restart: unless-stopped
+
+    ports:
+      - "8000:8000"
+
+    environment:
+      LOG_DIR: /app/result_log
+      WORDLIST_DIR: /usr/share/seclists
+      DEFAULT_TARGET: http://host.docker.internal:3000/
+
+    volumes:
+      # Persist logs on host (set WINDOWS_LOGS_PATH in .env.windows)
+      - ${WINDOWS_LOGS_PATH}:/app/result_log
+
+      # Your local wordlists (set WINDOWS_WORDLISTS_PATH in .env.windows)
+      - ${WINDOWS_WORDLISTS_PATH}:/usr/share/seclists:ro
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

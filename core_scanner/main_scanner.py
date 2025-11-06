@@ -1,28 +1,66 @@
 # core_scanner/main_scanner.py
 import datetime
 import json
-import os
 import httpx
 import asyncio
 from pathlib import Path
 
 from .json_logger import JSONLogger
+import os
+
+LOG_DIR = os.getenv("LOG_DIR", None)
+WORDLIST_DIR = os.getenv("WORDLIST_DIR", None)
+DEFAULT_TARGET = os.getenv("DEFAULT_TARGET", None)
 
 
 class Scanner:
     def __init__(self, target: str, wordlist_1: str, wordlist_2: str,
-                 json_file_name: str, json_file_path: str):
+             json_file_name: str, json_file_path: str):
+        # env vars (optional)
+        LOG_DIR = os.getenv("LOG_DIR")            # preferred logs base dir
+        WORDLIST_DIR = os.getenv("WORDLIST_DIR")  # optional base dir for wordlists
 
+        # plain assignment for target (no extra logic)
         self.target = target
-        self.wordlist_1 = wordlist_1
-        self.wordlist_2 = wordlist_2
 
-        # raw inputs
-        self.json_file_name = json_file_name
-        self.json_file_path = json_file_path
+        # minimal wordlist resolution:
+        # - absolute paths stay absolute
+        # - relative paths are resolved under WORDLIST_DIR if provided, otherwise left as given
+        def _resolve_wordlist(p):
+            if not p:
+                return None
+            p = str(p).strip()
+            if Path(p).is_absolute():
+                return p
+            if WORDLIST_DIR:
+                return str(Path(WORDLIST_DIR) / p)
+            return p
 
-        # after scan completes we store resolved filepaths here
+        self.wordlist_1 = _resolve_wordlist(wordlist_1)
+        self.wordlist_2 = _resolve_wordlist(wordlist_2)
+
+        # filename must be provided
+        if not json_file_name or not str(json_file_name).strip():
+            raise ValueError("json_file_name is required")
+        self.json_file_name = str(json_file_name).strip()
+
+        # minimal json path resolution:
+        # - if LOG_DIR is set, use LOG_DIR/<last_component_of(json_file_path)> (or reconsage_logs)
+        # - otherwise use the given json_file_path as-is (could be relative or absolute)
+        given = (json_file_path or "").strip()
+        if LOG_DIR:
+            folder = Path(given).name if given else "reconsage_logs"
+            self.json_file_path = str(Path(LOG_DIR) / folder)
+        else:
+            # if empty, fallback to 'reconsage_logs' in cwd
+            self.json_file_path = given or "reconsage_logs"
+
+        # placeholders to store real filepaths after writing
         self.saved_success_log = None
+        self.saved_client_errors_log = None
+        self.saved_redirects_log = None
+        self.saved_server_errors_log = None
+
 
 
     def extract_words_from_wordlist(self, wordlist):
@@ -99,20 +137,32 @@ class Scanner:
 
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-        # JSONLogger writes paths with fallback rules
+        # create loggers (unchanged)
         error_logger = JSONLogger(self.json_file_path, f"client_errors_{timestamp}.json")
         redirect_logger = JSONLogger(self.json_file_path, f"redirects_{timestamp}.json")
         server_error_logger = JSONLogger(self.json_file_path, f"server_errors_{timestamp}.json")
         success_logger = JSONLogger(self.json_file_path, self.json_file_name)
 
-        # write logs & COLLECT REAL PATHS
+        # write logs and capture the real absolute filepaths returned by JSONLogger.log_to_file()
         error_path = error_logger.log_to_file(target_errors_codes_record)
         redirect_path = redirect_logger.log_to_file(target_redirect_codes_records)
         server_error_path = server_error_logger.log_to_file(target_server_errors_codes)
         success_path = success_logger.log_to_file(target_successful_codes_records)
 
-        # save success path for false positives later
+        # store them on the Scanner instance for later use (false positives, downloads, etc.)
         self.saved_success_log = success_path
+        self.saved_client_errors_log = error_path
+        self.saved_redirects_log = redirect_path
+        self.saved_server_errors_log = server_error_path
+
+        # include files metadata in the API response (absolute paths)
+        files_info = {
+            "success_log": success_path,
+            "client_errors_log": error_path,
+            "redirects_log": redirect_path,
+            "server_errors_log": server_error_path
+        }
+
         false_positives_analysis = self.false_positives()
         return {
             "message": "Scan complete! Check JSON logs for details.",
@@ -124,12 +174,7 @@ class Scanner:
                 "server_errors": len(target_server_errors_codes),
                 "exceptions": len(some_unexpected_errors)
             },
-            "files": {
-                "success_log": success_path,
-                "client_errors_log": error_path,
-                "redirects_log": redirect_path,
-                "server_errors_log": server_error_path
-            },
+            "files": files_info,
             "false_positives": false_positives_analysis,
             "status": 200
         }

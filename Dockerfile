@@ -1,25 +1,28 @@
-# Use official Python runtime
 FROM python:3.11-slim
 
-# Set working directory
+# Create a non-root user for security
+RUN useradd -m appuser
+
+# Create working/app dirs owned by appuser
 WORKDIR /app
+RUN mkdir -p /app/result_log && chown -R appuser /app/result_log
 
 # Install dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy source
 COPY . .
 
-# Create output directories
-RUN mkdir -p /app/result_log /app/wordlists
+# Env var for logging directory
+ENV LOG_DIR="/app/result_log"
 
-# Expose port
+# Switch user
+USER appuser
+
 EXPOSE 8000
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=3s \
-  CMD python -c "import requests; requests.get('http://localhost:8000/')"
+  CMD python -c "import requests; requests.get('http://localhost:8000/', timeout=1)"
 
-# Run the application
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
