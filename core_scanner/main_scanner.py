@@ -111,7 +111,7 @@ class Scanner:
         redirect_logger.log_to_file(target_redirect_codes_records)
         server_error_logger.log_to_file(target_server_errors_codes)
         success_logger.log_to_file(target_successful_codes_records)
-        
+        fp_analysis = self.false_positives()
         return {
             "message": "Scan complete! Check JSON logs for details.",
             "summary": {
@@ -123,7 +123,8 @@ class Scanner:
                 "exceptions": len(some_unexpected_errors)
             },
             "unexpected_errors": some_unexpected_errors,
-            "status": 200
+            "status": 200,
+            "false_positive analysis": fp_analysis
         }
     def false_positives(self):
         
