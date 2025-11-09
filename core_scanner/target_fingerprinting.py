@@ -1,3 +1,5 @@
+import asyncio, httpx
+
 class FingerprintModels:
     def __init__(self, target, response_time, content_length, snippet, headers, status_code, tls_info, cheap_fp, cookies):
         self.target = target.strip().lower()
@@ -46,3 +48,36 @@ class FingerprintModels:
             "suggested_timeout_limits" : suggested_timeout_limits,
             "warning" : warning or None,
         }
+    def calculate_cheap_fp(self) :
+        KNOWN_WAF_TOKENS = ("cloudflare", "sucuri", "incapsula", "mod_security", "akamai", "aws-waf", "f5", "imperva")
+
+class AdvScanEngine:
+    def __init__(self, target):
+        self.target = target
+    
+    async def target_scan(self):
+        async with httpx.AsyncClient() as client:
+            try:
+                resp = await client.get(self.target)
+                model = FingerprintModels(
+                    target=str(resp.url),
+                    response_time=resp.elapsed.total_seconds(),
+                    content_length=int(resp.headers.get("content-length")) if resp.headers.get("content-length") else len(resp.content),
+                    snippet=resp.content[:512],
+                    headers=dict(resp.headers),
+                    tls_info={},
+                    cheap_fp={},
+                    cookies=dict(resp.cookies),
+                    status_code=resp.status_code
+                )
+                result = model.scan_fingerprint()
+                suggested_concurrency_limits = result["suggested_concurrency_limits"]
+                suggested_timeout_limits = result["suggested_timeout_limits"]
+                warnings = result["warning"]
+                return {
+                    "warnings" : warnings,
+                    "suggested_concurrency_limits" : suggested_concurrency_limits,
+                    "suggested_timeout_limits" : suggested_timeout_limits
+                }
+            except Exception as e:
+              print('An exception occurred', e)
