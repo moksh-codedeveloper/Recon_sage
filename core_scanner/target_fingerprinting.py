@@ -7,7 +7,7 @@ class FingerprintModels:
         self.content_length = content_length
         self.snippet = snippet 
         self.headers = headers 
-        self.status_codes = status_code
+        self.status_code = status_code
         self.tls_info = tls_info
         self.cheap_fp = cheap_fp
         self.cookies = cookies
@@ -40,7 +40,7 @@ class FingerprintModels:
             "content_length" : self.content_length,
             "snippet" : self.snippet,
             "headers" : self.headers,
-            "status_codes" : self.status_codes,
+            "status_codes" : self.status_code,
             "tls_info" : self.tls_info,
             "cheap_fp" : self.cheap_fp,
             "cookies" : self.cookies,
@@ -51,7 +51,7 @@ class FingerprintModels:
         }
 
 
-class AdvScanEngine:
+class PassiveFingerprintEngine:
     def __init__(self, target):
         self.target = target
     
