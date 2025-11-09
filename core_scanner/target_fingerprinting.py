@@ -1,4 +1,4 @@
-import asyncio, httpx
+import httpx
 
 class FingerprintModels:
     def __init__(self, target, response_time, content_length, snippet, headers, status_code, tls_info, cheap_fp, cookies):
@@ -20,6 +20,7 @@ class FingerprintModels:
         else:
             self.target_type = "unknown"
     def scan_fingerprint(self):
+        warning = None
         if self.target_type == "http_localhost" : 
             suggested_concurrency_limits = 100
             suggested_timeout_limits = 10
@@ -46,10 +47,9 @@ class FingerprintModels:
             "target_type" : self.target_type,
             "suggested_concurrency_limits" : suggested_concurrency_limits,
             "suggested_timeout_limits" : suggested_timeout_limits,
-            "warning" : warning or None,
+            "warning" : warning,
         }
-    def calculate_cheap_fp(self) :
-        KNOWN_WAF_TOKENS = ("cloudflare", "sucuri", "incapsula", "mod_security", "akamai", "aws-waf", "f5", "imperva")
+
 
 class AdvScanEngine:
     def __init__(self, target):
@@ -59,6 +59,7 @@ class AdvScanEngine:
         async with httpx.AsyncClient() as client:
             try:
                 resp = await client.get(self.target)
+                cheap_fp = self.calculate_cheap_fp(resp=resp)
                 model = FingerprintModels(
                     target=str(resp.url),
                     response_time=resp.elapsed.total_seconds(),
@@ -66,7 +67,7 @@ class AdvScanEngine:
                     snippet=resp.content[:512],
                     headers=dict(resp.headers),
                     tls_info={},
-                    cheap_fp={},
+                    cheap_fp=cheap_fp,
                     cookies=dict(resp.cookies),
                     status_code=resp.status_code
                 )
@@ -80,4 +81,10 @@ class AdvScanEngine:
                     "suggested_timeout_limits" : suggested_timeout_limits
                 }
             except Exception as e:
-              print('An exception occurred', e)
+                return {"error": str(e), "warnings": None, "suggested_concurrency_limits": 0, "suggested_timeout_limits": 0}
+    def calculate_cheap_fp(self, resp):
+        return {
+            "content-type" : resp.headers.get("content-type"),
+            "server" : resp.headers.get("server"),
+            "powered_by" : resp.headers.get("x-powered-by") or resp.headers.get("x-generator")
+        }
