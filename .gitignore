@@ -10,6 +10,7 @@ result_log/**/*.json
 .DS_Store
 .env
 *.md
+research_docs/
 !README.md
 app_test_logs/
 reconsage_logs/
