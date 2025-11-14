@@ -40,4 +40,11 @@ class RateLimitDetection:
                 hashed_bytes =  self.hash_snippet(response_bytes)
                 
                 timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%D-%M-%Y")
-                result[timestamp]
+                result[timestamp] = {
+                    "attacked_domain" : domain,
+                    "status_code" : status_code,
+                    "headers" : headers,
+                    "hash_bytes" : hashed_bytes,
+                    "hash_text" : hashed_text
+                }
+        return result
