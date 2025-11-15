@@ -22,7 +22,8 @@ class PassiveFingerprint:
     async def scan_data(self, domain):
         subdomain_target = self.target + domain
         try:
-            response = await httpx.get(subdomain_target, timeout=self.timeout)
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.get(subdomain_target)
             return response
         except Exception as e:
             return {
