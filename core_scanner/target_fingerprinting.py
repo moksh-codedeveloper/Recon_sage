@@ -1,90 +1,31 @@
-import httpx
+import hashlib
+import httpx, datetime
+from json_logger import JSONLogger
+from aimd_currency_governor import AIMDConcurrencyDataGather
 
-class FingerprintModels:
-    def __init__(self, target, response_time, content_length, snippet, headers, status_code, tls_info, cheap_fp, cookies):
-        self.target = target.strip().lower()
-        self.response_time = response_time
-        self.content_length = content_length
-        self.snippet = snippet 
-        self.headers = headers 
-        self.status_code = status_code
-        self.tls_info = tls_info
-        self.cheap_fp = cheap_fp
-        self.cookies = cookies
-        if (self.target.startswith("http://localhost") or self.target.startswith("http://127.0.0.1")):
-            self.target_type = "http_localhost"
-        elif self.target.startswith("http://") :
-            self.target_type = "http_real_target"
-        elif self.target.startswith("https://"):
-            self.target_type = "real_https"
-        else:
-            self.target_type = "unknown"
-    def scan_fingerprint(self):
-        warning = None
-        if self.target_type == "http_localhost" : 
-            suggested_concurrency_limits = 100
-            suggested_timeout_limits = 10
-        elif self.target_type == "http_real_target" :
-            suggested_concurrency_limits = 90
-            suggested_timeout_limits = 10
-        elif self.target_type == "real_https":
-            suggested_concurrency_limits = 70
-            suggested_timeout_limits = 15
-        else :
-            suggested_concurrency_limits = 0
-            suggested_timeout_limits = 0
-            warning = "Your provided target is not valid according to what model expects ex :- https://example.com/ (dont pass this as it is but be aware)"
-        return {
-            "target" : self.target,
-            "response_time" : self.response_time,
-            "content_length" : self.content_length,
-            "snippet" : self.snippet,
-            "headers" : self.headers,
-            "status_codes" : self.status_code,
-            "tls_info" : self.tls_info,
-            "cheap_fp" : self.cheap_fp,
-            "cookies" : self.cookies,
-            "target_type" : self.target_type,
-            "suggested_concurrency_limits" : suggested_concurrency_limits,
-            "suggested_timeout_limits" : suggested_timeout_limits,
-            "warning" : warning,
-        }
-
-
-class PassiveFingerprintEngine:
-    def __init__(self, target):
+class PassiveFingerprint:
+    def __init__(self, target, wordlist_path_1, wordlist_path_2, timeout):
         self.target = target
-    
-    async def target_scan(self):
-        async with httpx.AsyncClient() as client:
-            try:
-                resp = await client.get(self.target)
-                cheap_fp = self.calculate_cheap_fp(resp=resp)
-                model = FingerprintModels(
-                    target=str(resp.url),
-                    response_time=resp.elapsed.total_seconds(),
-                    content_length=int(resp.headers.get("content-length")) if resp.headers.get("content-length") else len(resp.content),
-                    snippet=resp.content[:512],
-                    headers=dict(resp.headers),
-                    tls_info={},
-                    cheap_fp=cheap_fp,
-                    cookies=dict(resp.cookies),
-                    status_code=resp.status_code
-                )
-                result = model.scan_fingerprint()
-                suggested_concurrency_limits = result["suggested_concurrency_limits"]
-                suggested_timeout_limits = result["suggested_timeout_limits"]
-                warnings = result["warning"]
-                return {
-                    "warnings" : warnings,
-                    "suggested_concurrency_limits" : suggested_concurrency_limits,
-                    "suggested_timeout_limits" : suggested_timeout_limits
-                }
-            except Exception as e:
-                return {"error": str(e), "warnings": None, "suggested_concurrency_limits": 0, "suggested_timeout_limits": 0}
-    def calculate_cheap_fp(self, resp):
-        return {
-            "content-type" : resp.headers.get("content-type"),
-            "server" : resp.headers.get("server"),
-            "powered_by" : resp.headers.get("x-powered-by") or resp.headers.get("x-generator")
-        }
+        self.wordlist_1 = wordlist_path_1
+        self.wordlist_2 = wordlist_path_2
+        self.timeout = timeout
+
+    def wordlist_data_extractor(self):
+        data = []
+        with open(self.wordlist_1, "r", encoding='utf-8') as f:
+            for line in f:
+                s = line.strip()
+                if s :
+                    data.append(s)
+        return data
+
+    async def scan_data(self, domain):
+        subdomain_target = self.target + domain
+        try:
+            response = await httpx.get(subdomain_target, timeout=self.timeout)
+            return response
+        except Exception as e:
+            return {
+                "message" : f"There is one Exception which has occurred here!{e}"
+            }
+

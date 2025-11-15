@@ -1,12 +1,12 @@
 import httpx
 class AIMDConcurrencyDataGather:
-    def __init__(self,target_response:httpx.Response, current_concurrency_limit, current_timeout_limit):
-        self.target_url = target_response.url
+    def __init__(self,target_url, status_code, current_concurrency_limit, current_timeout_limit):
+        self.target_url = target_url
         self.concurrency_limit = current_concurrency_limit
         self.timeout_limit = current_timeout_limit
         self.alpha = 1
         self.beta = 0.5
-        self.status_code = target_response.status_code
+        self.status_code = status_code
         self.base_concurrency = 100
         self.max_concurrency = 200
     def data_to_dict(self):
