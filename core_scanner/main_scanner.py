@@ -5,8 +5,9 @@ import json
 import httpx
 import asyncio
 from pathlib import Path
-import os
 import logging
+
+from core_scanner.target_fingerprinting import PassiveFingerprint
 
 from .json_logger import JSONLogger
 
@@ -21,11 +22,11 @@ class Scanner:
         if not target or not str(target).strip():
             raise ValueError("target URL is required")
         self.target = target.strip()
-        
+        self.timeout = 10
         # Validate wordlists (paths as-is, no env var resolution)
         self.wordlist_1 = str(wordlist_1).strip() if wordlist_1 else None
         self.wordlist_2 = str(wordlist_2).strip() if wordlist_2 else None
-        
+        self.concurrency_rate = 100
         # Validate filename
         if not json_file_name or not str(json_file_name).strip():
             raise ValueError("json_file_name is required")
@@ -34,157 +35,70 @@ class Scanner:
         # Folder name (used in ~/reconsage_logs/<folder>/)
         self.json_file_path = str(json_file_path).strip() if json_file_path else "default"
 
-    def extract_words_from_wordlist(self, wordlist):
-        def _try_open(path):
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    return [line.strip() for line in f if line.strip()]
-            except FileNotFoundError:
-                return None
-            except Exception as e:
-                # If some other error occurs (encoding, permission), log and return None
-                logger.warning("Error opening wordlist %s: %s", path, e)
-                return None
-        if not wordlist:
-            logger.info("No wordlist path provided (received falsy value).")
-            return []
-        candidates = []
-        wl = str(wordlist).strip()
-        # If absolute path was provided, try that first
-        if os.path.isabs(wl):
-            candidates.append(wl)
-        else:
-            # raw relative/filename as provided
-            candidates.append(wl)
-            # try common Seclists absolute path
-            candidates.append(os.path.join("/usr/share/seclists", wl))
-            candidates.append(os.path.join("/usr/share/seclists", "Fuzzing", wl))
-            # try docker-compose mounted path /wordlists
-            candidates.append(os.path.join("/wordlists", wl))
-            candidates.append(os.path.join("/wordlists", "Fuzzing", wl))
-        # deduplicate while preserving order
-        seen = set()
-        candidates = [p for p in candidates if p not in seen and not seen.add(p)]
-        for candidate in candidates:
-            if not candidate:
-                continue
-            data = _try_open(candidate)
-            if data is not None:
-                logger.info("Loaded wordlist from: %s (items=%d)", candidate, len(data))
-                return data
-        # nothing worked — log warning and return empty list (do not raise)
-        tried = ", ".join(candidates)
-        logger.warning("Wordlist not found for '%s'. Tried: %s", wordlist, tried)
-        return []
-
-
     async def run_scan(self):
-        """Main scanning logic"""
-        
-        # Load wordlists
-        lists = []
-        if self.wordlist_1:
-            lists.append(self.extract_words_from_wordlist(self.wordlist_1))
-        if self.wordlist_2:
-            lists.append(self.extract_words_from_wordlist(self.wordlist_2))
-        
-        # Deduplicate domains
-        all_domains = list(set([d for sub in lists for d in sub]))
-        
-        if not all_domains:
-            return {
-                "error": "No domains loaded from wordlists",
-                "status": 400
+        result = {}
+        error_status_code = []
+        redirect_status_code = []
+        success_status_code = []
+        server_status_code = []
+        pf = PassiveFingerprint(target=self.target, timeout=self.timeout)
+        # Ensure extractor returns a list (fallback to empty list if None)
+        wordlist_data_1 = pf.wordlist_data_extractor(wordlist=self.wordlist_1) or []
+        wordlist_data_2 = pf.wordlist_data_extractor(wordlist=self.wordlist_2) or []
+        # Combine safely (list.append returns None), filter out any None sublists
+        wordlist_data = []
+        if isinstance(wordlist_data_1, list):
+            wordlist_data.extend([sub for sub in wordlist_data_1 if sub])
+        if isinstance(wordlist_data_2, list):
+            wordlist_data.extend([sub for sub in wordlist_data_2 if sub])
+        # Flatten into a single list of domains, guarding against None sublists
+        all_domain = [d for sub in wordlist_data for d in (sub or [])]
+        for domain in all_domain:
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            scanned_result = await pf.scan_data(domain=domain)
+            status_code = scanned_result["status_code"]
+            headers = scanned_result["headers"]
+            hash_text = scanned_result["hashed_body"]
+            latency_ms = scanned_result["latency_ms"]
+            response_object = scanned_result["response_object"]
+            content_length = scanned_result["content_length"]
+            result[response_object.url] = {
+                "status_code" : status_code,
+                "headers" : headers,
+                "hash_text" : hash_text,
+                "latency_ms" : latency_ms,
+                "timestamps" : timestamp,
+                "content_length" : content_length 
             }
+            if status_code >= 200 and status_code < 300:
+                success_status_code.append(response_object.url)
+            elif status_code >= 300 and status_code < 400:
+                redirect_status_code.append(response_object.url)
+            elif status_code >= 400 and status_code < 500:
+                error_status_code.append(response_object.url)
+            else : 
+                server_status_code.append(response_object.url)
         
-        # Response categories
-        target_successful_codes_records = {}
-        target_redirect_codes_records = {}
-        target_errors_codes_record = {}
-        target_server_errors_codes = {}
-        some_unexpected_errors = {}
-        
-        sem = asyncio.Semaphore(100)
-        
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            async def return_codes(domain: str):
-                async with sem:
-                    try:
-                        subdirectory_target = self.target + domain
-                        response = await client.get(subdirectory_target)
-                        return (response.status_code, str(response.url), len(response.text))
-                    except Exception as e:
-                        return (None, subdirectory_target, str(e))
-            
-            tasks = [return_codes(domain) for domain in all_domains]
-            results = await asyncio.gather(*tasks)
-        
-        # Categorize results
-        for codes, url, message in results:
-            if codes is None:
-                some_unexpected_errors[url] = {
-                    "status_code": None,
-                    "error": message
-                }
-            elif 200 <= codes < 300:
-                target_successful_codes_records[url] = {
-                    "status_code": codes,
-                    "content_length": message
-                }
-            elif 300 <= codes < 400:
-                target_redirect_codes_records[url] = {
-                    "status_code": codes,
-                    "content_length": message
-                }
-            elif 400 <= codes < 500:
-                target_errors_codes_record[url] = {
-                    "status_code": codes,
-                    "content_length": message
-                }
-            elif codes >= 500:
-                target_server_errors_codes[url] = {
-                    "status_code": codes,
-                    "content_length": message
-                }
-        
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        
-        # Create loggers (all go to ~/reconsage_logs/<json_file_path>/)
-        error_logger = JSONLogger(self.json_file_path, f"client_errors_{timestamp}.json")
-        redirect_logger = JSONLogger(self.json_file_path, f"redirects_{timestamp}.json")
-        server_error_logger = JSONLogger(self.json_file_path, f"server_errors_{timestamp}.json")
-        success_logger = JSONLogger(self.json_file_path, self.json_file_name)
-        
-        # Write logs
-        error_path = error_logger.log_to_file(target_errors_codes_record)
-        redirect_path = redirect_logger.log_to_file(target_redirect_codes_records)
-        server_error_path = server_error_logger.log_to_file(target_server_errors_codes)
-        success_path = success_logger.log_to_file(target_successful_codes_records)
-        
-        # Include files metadata in response
-        files_info = {
-            "success_log": success_path,
-            "client_errors_log": error_path,
-            "redirects_log": redirect_path,
-            "server_errors_log": server_error_path
+        success_logs = {
+            "message" : "The detailed logs to understand your victim more clearly",
+            "result" : result,
+            "successfully_accessed_urls" : success_status_code,
+            "error_accessing_url" : len(error_status_code),
+            "redirect_access_url" : len(redirect_status_code),
+            "server_error_access_url" : len(server_status_code),
         }
-        
-        # Run false positives analysis
-        false_positives_analysis = self.false_positives()
-        
+        success_logger = JSONLogger(json_file_name=self.json_file_name, json_file_path=self.json_file_path)
+        success_logger.log_to_file(success_logs)
         return {
-            "message": "Scan complete! Check JSON logs for details.",
-            "summary": {
-                "total_scanned": len(all_domains),
-                "successful": len(target_successful_codes_records),
-                "redirects": len(target_redirect_codes_records),
-                "client_errors": len(target_errors_codes_record),
-                "server_errors": len(target_server_errors_codes),
-                "exceptions": len(some_unexpected_errors)
+            "message" : "Successfully done the scan results are all created!",
+            "scanned_result" : result,
+            "more_detailed" : {
+                "length_of_successful_url" : len(success_status_code),
+                "length_of_error_url" : len(error_status_code),
+                "length_of_redirect_url" : len(redirect_status_code),
+                "length_of_server_error" : len(server_status_code)
             },
-            "files": files_info,
-            "false_positives": false_positives_analysis,
-            "status": 200
+            "status_code" : 200
         }
 
     def false_positives(self):
@@ -248,7 +162,6 @@ class Scanner:
                         "confidence": "high",
                         "note": "Passed basic false positive checks"
                     })
-        
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         
         fp_log_name = f"false_positives_{timestamp}.json"

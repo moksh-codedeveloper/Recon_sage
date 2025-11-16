@@ -17,7 +17,7 @@ class AIMDConcurrencyDataGather:
             "status_code" : self.status_code
         }
         return collected_data
-    
+
     def aimd_calculator(self):
         if 200 <= self.status_code < 300:
             self.concurrency_limit += self.alpha * 10
