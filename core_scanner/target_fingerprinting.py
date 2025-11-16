@@ -38,6 +38,7 @@ class PassiveFingerprint:
                 "server": response.headers.get("Server"),
                 "powered_by": response.headers.get("X-Powered-By"),
                 "cdn": response.headers.get("Via") or response.headers.get("CF-Ray"),
+                "url" : response.url,
                 "tls": {
                     "version": response.extensions.get("tls_version"),
                     "cipher": response.extensions.get("tls_cipher_suite"),

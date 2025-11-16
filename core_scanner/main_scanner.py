@@ -60,9 +60,9 @@ class Scanner:
             headers = scanned_result["headers"]
             hash_text = scanned_result["hashed_body"]
             latency_ms = scanned_result["latency_ms"]
-            response_object = scanned_result["response_object"]
+            url = scanned_result["url"]
             content_length = scanned_result["content_length"]
-            result[response_object.url] = {
+            result[url] = {
                 "status_code" : status_code,
                 "headers" : headers,
                 "hash_text" : hash_text,
@@ -71,13 +71,13 @@ class Scanner:
                 "content_length" : content_length 
             }
             if status_code >= 200 and status_code < 300:
-                success_status_code.append(response_object.url)
+                success_status_code.append(url)
             elif status_code >= 300 and status_code < 400:
-                redirect_status_code.append(response_object.url)
+                redirect_status_code.append(url)
             elif status_code >= 400 and status_code < 500:
-                error_status_code.append(response_object.url)
+                error_status_code.append(url)
             else : 
-                server_status_code.append(response_object.url)
+                server_status_code.append(url)
         
         success_logs = {
             "message" : "The detailed logs to understand your victim more clearly",
