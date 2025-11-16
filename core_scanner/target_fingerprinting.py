@@ -1,18 +1,13 @@
 import hashlib
-import httpx, datetime
-from json_logger import JSONLogger
-from aimd_currency_governor import AIMDConcurrencyDataGather
-
+import httpx
 class PassiveFingerprint:
-    def __init__(self, target, wordlist_path_1, wordlist_path_2, timeout):
+    def __init__(self, target, timeout):
         self.target = target
-        self.wordlist_1 = wordlist_path_1
-        self.wordlist_2 = wordlist_path_2
         self.timeout = timeout
 
-    def wordlist_data_extractor(self):
+    def wordlist_data_extractor(self, wordlist):
         data = []
-        with open(self.wordlist_1, "r", encoding='utf-8') as f:
+        with open(wordlist, "r", encoding='utf-8') as f:
             for line in f:
                 s = line.strip()
                 if s :
@@ -30,3 +25,10 @@ class PassiveFingerprint:
                 "message" : f"There is one Exception which has occurred here!{e}"
             }
 
+    def hash_snippet(self, body, length=300):
+        if isinstance(body, bytes):
+            snippet = body[:length]
+            return hashlib.sha256(snippet).hexdigest()
+        else:
+            snippet = body[:length]
+            return hashlib.sha256(snippet.encode()).hexdigest()
