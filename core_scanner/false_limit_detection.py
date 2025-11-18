@@ -1,5 +1,6 @@
 import json
 import os
+
 from core_scanner.target_fingerprinting import PassiveFingerprint
 
 class FalseDetector:
