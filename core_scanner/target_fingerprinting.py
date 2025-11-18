@@ -21,14 +21,12 @@ class PassiveFingerprint:
             status_code = response.status_code
             headers = response.headers
             body_text = response.text
-            hashed_body = self.hash_snippet(body=body_text)
             latency_ms = response.elapsed.total_seconds() * 1000
             return{
                 "status_code" : status_code,
                 "headers" : headers,
-                "hashed_body" : hashed_body,
                 "latency_ms" : latency_ms,
-                "response_object" : response,
+                "response_body" : body_text,
                 "content_length" : len(response.text),
                 "cookies" : response.cookies.jar,
                 "http_version" : response.http_version,
@@ -50,10 +48,10 @@ class PassiveFingerprint:
                 "x_content_type_options" : response.headers.get("X-Content-Type-Options"),
                 "strict_transport_security" : response.headers.get("Strict-Transport-Security")
             }
-    def hash_snippet(self, body, length=300):
+    def hash_snippet(self, body):
         if isinstance(body, bytes):
-            snippet = body[:length]
+            snippet = body
             return hashlib.sha256(snippet).hexdigest()
         else:
-            snippet = body[:length]
+            snippet = body
             return hashlib.sha256(snippet.encode()).hexdigest()
