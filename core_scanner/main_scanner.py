@@ -17,16 +17,16 @@ logger = logging.getLogger("core_scanner")
 
 class Scanner:
     def __init__(self, target: str, wordlist_1: str, wordlist_2: str,
-                 json_file_name: str, json_file_path: str):     
+                 json_file_name: str, json_file_path: str, timeout, concurrency):     
         # Validate target
         if not target or not str(target).strip():
             raise ValueError("target URL is required")
         self.target = target.strip()
-        self.timeout = 10
+        self.timeout = timeout
         # Validate wordlists (paths as-is, no env var resolution)
         self.wordlist_1 = str(wordlist_1).strip() if wordlist_1 else None
         self.wordlist_2 = str(wordlist_2).strip() if wordlist_2 else None
-        self.concurrency_rate = 100
+        self.concurrency_rate = concurrency
         # Validate filename
         if not json_file_name or not str(json_file_name).strip():
             raise ValueError("json_file_name is required")
