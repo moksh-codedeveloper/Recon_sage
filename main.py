@@ -15,6 +15,8 @@ class Target(BaseModel):
     wordlist_2: str
     json_file_path: str
     json_file_name: str
+    concurrency: int
+    timeout: int
 
 
 app = FastAPI(title="ReconSage V1.1.5")
@@ -39,6 +41,8 @@ async def run_scan(target: Target):
             wordlist_2=target.wordlist_2,
             json_file_path=target.json_file_path,
             json_file_name=target.json_file_name,
+            timeout=target.timeout,
+            concurrency=target.concurrency
         )
     except ValueError as e:
         # bad input from client
