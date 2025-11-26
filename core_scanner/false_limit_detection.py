@@ -4,12 +4,13 @@ import os
 from core_scanner.target_fingerprinting import PassiveFingerprint
 
 class FalseDetector:
-    def __init__(self, target, json_full_path, json_file_name):
+    def __init__(self, target, json_full_path, json_file_name, timeout, concurrency):
         self.target = target 
         self.json_file_name = json_file_name
         self.json_full_path = json_full_path
         self.json_file_path = os.path.join(self.json_file_name, self.json_full_path)
-        self.timeout = 10
+        self.timeout = timeout
+        self.concurrency = concurrency
     
     def read_json_file(self):
         try:
@@ -20,7 +21,7 @@ class FalseDetector:
 
     async def scanner_module(self):
         false_positive_score = 0
-        pf = PassiveFingerprint(target=self.target, timeout=self.timeout)
+        pf = PassiveFingerprint(target=self.target, timeout=self.timeout, concurrency=self.concurrency)
         common_hashed_body = {}
         common_content_length = {}
         read_json_file_result = self.read_json_file()

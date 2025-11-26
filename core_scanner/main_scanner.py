@@ -41,7 +41,7 @@ class Scanner:
         redirect_status_code = []
         success_status_code = []
         server_status_code = []
-        pf = PassiveFingerprint(target=self.target, timeout=self.timeout)
+        pf = PassiveFingerprint(target=self.target, timeout=self.timeout, concurrency=self.concurrency_rate)
         # Ensure extractor returns a list (fallback to empty list if None)
         wordlist_data_1 = pf.wordlist_data_extractor(wordlist=self.wordlist_1) or []
         wordlist_data_2 = pf.wordlist_data_extractor(wordlist=self.wordlist_2) or []

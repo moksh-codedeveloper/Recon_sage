@@ -8,5 +8,5 @@ class RateLimitDetection:
         self.timeout = timeout
         self.concurrency = concurrency
     
-    def benign_request(self, timeout):
-        pf = PassiveFingerprint(target=self.url, timeout=timeout)
+    def benign_request(self, timeout, concurrency):
+        pf = PassiveFingerprint(target=self.url, timeout=timeout, concurrency=concurrency)
