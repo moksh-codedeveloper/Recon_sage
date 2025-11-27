@@ -1,4 +1,3 @@
-import httpx
 class AIMDConcurrencyDataGather:
     def __init__(self,target_url, status_code, current_concurrency_limit, current_timeout_limit):
         self.target_url = target_url

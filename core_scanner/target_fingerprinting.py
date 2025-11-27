@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
-import httpx
+import httpx, asyncio
+from core_scanner.aimd_currency_governor import AIMDConcurrencyDataGather
 class PassiveFingerprint:
     def __init__(self, target, timeout, concurrency):
         self.target = target
@@ -59,3 +60,30 @@ class PassiveFingerprint:
         else:
             snippet = body
             return hashlib.sha256(snippet.encode()).hexdigest()
+
+class WarmUpModel:
+    async def benign_request(self, target, domains:list):
+        list_concurrency = []
+        list_timeout = []
+        if len(domains) >= 5:
+            raise Exception("Bro you passed too much big domain list i just want 5 of that list this is not main scan this is the warm up scan")
+        try:
+            async with httpx.AsyncClient() as client:
+                async def check_url(target, domains):
+                    new_target = target + domains
+                    resp = await client.get(new_target)
+                    return resp
+                for domain in domains:
+                    resp = await check_url(target=target, domains=domain)
+                    aimd_calculator = AIMDConcurrencyDataGather(target_url=target, status_code=resp.status_code, current_concurrency_limit=100, current_timeout_limit=10)
+                    aimd_result = aimd_calculator.aimd_calculator()
+                    # return (aimd_result, aimd_calculator.data_to_dict())
+                    list_concurrency.append(aimd_result["new_concurrency"])
+                    list_timeout.append(aimd_result["new_timeout"])
+                return {
+                    "calculated_concurrency" : list_concurrency,
+                    "calculated_timeout" : list_timeout
+                }
+        except Exception as e:
+            print("There is some unexpected error with the target request", e)
+            return False
