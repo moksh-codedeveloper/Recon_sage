@@ -4,13 +4,8 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from core_scanner.main_scanner import Scanner
 import uvicorn
-import logging
 
 from core_scanner.target_fingerprinting import WarmUpModel
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("reconsage_main")
-
 
 class Target(BaseModel):
     target: str
@@ -44,7 +39,11 @@ async def main_scan(target:Target):
     timeout = int(statistics.median(timeout_rate))
     scan_model = Scanner(target=target.target, wordlist_1=target.wordlist, wordlist_2=target.wordlist_2, json_file_name=target.json_file_name, json_file_path=target.json_file_path, concurrency=concurrency, timeout=timeout)
     main_scan_result = await scan_model.run_scan()
-    return main_scan_result
+    return {
+        "main_scan_result" : main_scan_result,
+        "concurrency" : concurrency,
+        "timeout" : timeout
+    }
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

@@ -1,7 +1,8 @@
+# core_scanner/target_fingerprinting.py
 import asyncio
 import hashlib
-import httpx, asyncio
-from core_scanner.aimd_currency_governor import AIMDConcurrencyDataGather
+import httpx
+from .aimd_currency_governor import AIMDConcurrencyDataGather
 class PassiveFingerprint:
     def __init__(self, target, timeout, concurrency):
         self.target = target
@@ -13,53 +14,52 @@ class PassiveFingerprint:
         with open(wordlist, "r", encoding='utf-8') as f:
             for line in f:
                 s = line.strip()
-                if s :
+                if s:
                     data.append(s)
         return data
 
-    async def scan_data(self, domain):
-        subdomain_target = self.target + domain
-        sem = asyncio.Semaphore(self.concurrency)
-        async with sem:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(subdomain_target)
-                status_code = response.status_code
-                headers = response.headers
-                body_text = response.text
-                latency_ms = response.elapsed.total_seconds() * 1000
-                return{
-                    "status_code" : status_code,
-                    "headers" : headers,
-                    "latency_ms" : latency_ms,
-                    "response_body" : body_text,
-                    "content_length" : len(response.text),
-                    "cookies" : response.cookies.jar,
-                    "http_version" : response.http_version,
-                    "charset" : response.encoding,
-                    "content_type": response.headers.get("Content-Type"),
-                    "redirect_chain": [str(r.url) for r in response.history],
-                    "server": response.headers.get("Server"),
-                    "powered_by": response.headers.get("X-Powered-By"),
-                    "cdn": response.headers.get("Via") or response.headers.get("CF-Ray"),
-                    "url" : response.url,
-                    "tls": {
-                        "version": response.extensions.get("tls_version"),
-                        "cipher": response.extensions.get("tls_cipher_suite"),
-                        "peer_cert" : response.extensions.get("tls_peer_cert")
-                    },
-                    "set_cookies" : response.headers.get("Set-Cookie"),
-                    "content_security_policy" : response.headers.get("Content-Security-Policy"),
-                    "x_frame_options" : response.headers.get("X-Frame-Options"),
-                    "x_content_type_options" : response.headers.get("X-Content-Type-Options"),
-                    "strict_transport_security" : response.headers.get("Strict-Transport-Security")
-                }
+    async def scan_data(self, domain, client):
+        # sanitize domain
+        if not domain.startswith("/"):
+            domain = "/" + domain
+
+        subdomain_target = (self.target.rstrip("/") + domain).strip()
+
+        try:
+            response = await client.get(subdomain_target)
+            status_code = response.status_code
+            body_text = response.text
+            hashed_body = hashlib.sha256(body_text.encode()).hexdigest()
+
+            return {
+                "success": True,
+                "url": str(response.url),
+                "status_code": status_code,
+                "headers": dict(response.headers),
+                "latency_ms": response.elapsed.total_seconds() * 1000,
+                "response_body": body_text,
+                "hashed_body": hashed_body,
+                "content_length": len(body_text),
+            }
+
+        except Exception as e:
+            return {
+                "success": False,
+                "url": subdomain_target,
+                "status_code": 0,
+                "error": str(e),
+                "headers": {},
+                "latency_ms": None,
+                "response_body": "",
+                "hashed_body": None,
+                "content_length": 0,
+            }
+
     def hash_snippet(self, body):
         if isinstance(body, bytes):
-            snippet = body
-            return hashlib.sha256(snippet).hexdigest()
+            return hashlib.sha256(body).hexdigest()
         else:
-            snippet = body
-            return hashlib.sha256(snippet.encode()).hexdigest()
+            return hashlib.sha256(body.encode()).hexdigest()
 
 class WarmUpModel:
     async def benign_request(self, target, domains:list, concurrency, timeout):

@@ -1,61 +1,107 @@
 import json
 import os
+import asyncio
+import httpx
+from urllib.parse import urlparse
 
 from core_scanner.target_fingerprinting import PassiveFingerprint
 
+
 class FalseDetector:
     def __init__(self, target, json_full_path, json_file_name, timeout, concurrency):
-        self.target = target 
+        self.target = target
         self.json_file_name = json_file_name
         self.json_full_path = json_full_path
         self.json_file_path = os.path.join(self.json_file_name, self.json_full_path)
         self.timeout = timeout
         self.concurrency = concurrency
-    
+
     def read_json_file(self):
         try:
             with open(self.json_file_path, "r", encoding='utf-8') as f:
                 return json.load(f)
         except FileNotFoundError:
-            raise FileNotFoundError("Your provided file is not present at the provided path please provide a proper path")
+            raise FileNotFoundError(
+                "Provided JSON file not found. Check your path again."
+            )
 
     async def scanner_module(self):
         false_positive_score = 0
-        pf = PassiveFingerprint(target=self.target, timeout=self.timeout, concurrency=self.concurrency)
-        common_hashed_body = {}
-        common_content_length = {}
+        pf = PassiveFingerprint(self.target, self.timeout, self.concurrency)
+
         read_json_file_result = self.read_json_file()
         success_urls = read_json_file_result.get("successfully_accessed_urls", [])
-        for urls in success_urls:
-            scanned_result = await pf.scan_data(domain=urls)
-            response_body = scanned_result["response_body"]
-            hashed_body = pf.hash_snippet(response_body)
-            content_length = scanned_result["content_length"]
-            if not hashed_body in common_hashed_body:
-                common_hashed_body[hashed_body] = []
-            else :
-                common_hashed_body[hashed_body].append(scanned_result["url"])
-            
-            if not content_length in common_content_length:
-                common_content_length[content_length] = []
-            else :
-                common_content_length[content_length].append(scanned_result["url"])
+
+        # -------------------------------
+        # Convert full URLs → paths only
+        # -------------------------------
+        domains_to_scan = []
+        for full_url in success_urls:
+            parsed = urlparse(full_url)
+            path = parsed.path if parsed.path else "/"
+            domains_to_scan.append(path)
+
+        # Shared maps
+        common_hashed_body = {}
+        common_content_length = {}
+
+        # -------------------------------
+        # REAL CONCURRENCY + SHARED CLIENT
+        # -------------------------------
+        sem = asyncio.Semaphore(self.concurrency)
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+
+            async def bounded_false_scan(domain):
+                async with sem:
+                    return await pf.scan_data(domain, client)
+
+            tasks = [bounded_false_scan(domain) for domain in domains_to_scan]
+            scan_results = await asyncio.gather(*tasks)
+
+        # -------------------------------
+        # Process results
+        # -------------------------------
+        for scanned_result in scan_results:
+            url = scanned_result["url"]
+            body = scanned_result.get("response_body", "")
+            hashed_body = pf.hash_snippet(body)
+            content_length = scanned_result.get("content_length", 0)
+
+            # HASH BUCKETS
+            if hashed_body not in common_hashed_body:
+                common_hashed_body[hashed_body] = [url]
+            else:
+                common_hashed_body[hashed_body].append(url)
+
+            # CONTENT LENGTH BUCKETS
+            if content_length not in common_content_length:
+                common_content_length[content_length] = [url]
+            else:
+                common_content_length[content_length].append(url)
+
+        # -------------------------------
+        # Detect false positives
+        # -------------------------------
         false_positive_detected_hash_urls = {}
         false_positive_detected_content_url = {}
-        for hashed_response, url in common_hashed_body.items():
-            if len(url) > 2:
+
+        for hashed_response, urls in common_hashed_body.items():
+            if len(urls) >= 3:   # threshold tuned
                 false_positive_score += 10
-                false_positive_detected_hash_urls[hashed_response] = url
-            else :
-                false_positive_score -= 10
-        
-        for content_length, url in common_content_length.items():
-            if len(url) > 10:
+                false_positive_detected_hash_urls[hashed_response] = urls
+
+        for length, urls in common_content_length.items():
+            if len(urls) >= 5:   # threshold tuned
                 false_positive_score += 10
-                false_positive_detected_content_url[content_length] = url
+                false_positive_detected_content_url[length] = urls
+
+        # -------------------------------
+        # Final return
+        # -------------------------------
         return {
-            "message" : "Here is your scan result from the false positive module",
-            "false_positive_detected_from_hashes" : false_positive_detected_hash_urls,
-            "false_positive_detected_from_content_length" : false_positive_detected_content_url,
-            "false_positive_score" : false_positive_score
+            "message": "False-positive analysis completed.",
+            "false_positive_detected_from_hashes": false_positive_detected_hash_urls,
+            "false_positive_detected_from_content_length": false_positive_detected_content_url,
+            "false_positive_score": false_positive_score,
         }
