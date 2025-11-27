@@ -37,8 +37,8 @@ async def main_scan(target:Target):
     timeout_rate = scan_result["calculated_timeout"]
     concurrency = int(statistics.median(concurrency_rate))
     timeout = int(statistics.median(timeout_rate))
-    scan_model = Scanner(target=target.target, wordlist_1=target.wordlist, wordlist_2=target.wordlist_2, json_file_name=target.json_file_name, json_file_path=target.json_file_path, concurrency=concurrency, timeout=timeout)
-    main_scan_result = await scan_model.run_scan()
+    scan_model = Scanner(target=target.target, json_file_name=target.json_file_name, json_file_path=target.json_file_path)
+    main_scan_result = await scan_model.run_scan(wordlist_1=target.wordlist, wordlist_2=target.wordlist_2, concurrency=concurrency, timeout=timeout)
     return {
         "main_scan_result" : main_scan_result,
         "concurrency" : concurrency,

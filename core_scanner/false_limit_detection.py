@@ -1,7 +1,6 @@
 import json
 import os
 import asyncio
-import httpx
 from urllib.parse import urlparse
 
 from core_scanner.target_fingerprinting import PassiveFingerprint
@@ -50,14 +49,12 @@ class FalseDetector:
         # -------------------------------
         sem = asyncio.Semaphore(self.concurrency)
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async def bounded_false_scan(domain):
+            async with sem:
+                return await pf.scan_data(domain)
 
-            async def bounded_false_scan(domain):
-                async with sem:
-                    return await pf.scan_data(domain, client)
-
-            tasks = [bounded_false_scan(domain) for domain in domains_to_scan]
-            scan_results = await asyncio.gather(*tasks)
+        tasks = [bounded_false_scan(domain) for domain in domains_to_scan]
+        scan_results = await asyncio.gather(*tasks)
 
         # -------------------------------
         # Process results

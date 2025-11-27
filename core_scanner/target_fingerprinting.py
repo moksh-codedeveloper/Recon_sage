@@ -1,65 +1,67 @@
 # core_scanner/target_fingerprinting.py
-import asyncio
 import hashlib
 import httpx
 from .aimd_currency_governor import AIMDConcurrencyDataGather
 class PassiveFingerprint:
     def __init__(self, target, timeout, concurrency):
-        self.target = target
+        self.target = target.rstrip("/")
         self.timeout = timeout
         self.concurrency = concurrency
 
+        # GLOBAL CLIENT (reused across all requests)
+        self.client = httpx.AsyncClient(
+            timeout=timeout,
+            limits=httpx.Limits(
+                max_connections=concurrency,
+                max_keepalive_connections=concurrency
+            )
+        )
+    def hash_snippet(self, body):
+        if isinstance(body, bytes):
+            return hashlib.sha256(body).hexdigest()
+        else:
+            return hashlib.sha256(body.encode()).hexdigest()
     def wordlist_data_extractor(self, wordlist):
-        data = []
         with open(wordlist, "r", encoding='utf-8') as f:
-            for line in f:
-                s = line.strip()
-                if s:
-                    data.append(s)
-        return data
+            return [line.strip() for line in f if line.strip()]
 
-    async def scan_data(self, domain, client):
-        # sanitize domain
+    async def scan_data(self, domain):
+        # sanitize
         if not domain.startswith("/"):
             domain = "/" + domain
 
-        subdomain_target = (self.target.rstrip("/") + domain).strip()
+        url = self.target + domain
 
         try:
-            response = await client.get(subdomain_target)
-            status_code = response.status_code
-            body_text = response.text
-            hashed_body = hashlib.sha256(body_text.encode()).hexdigest()
+            response = await self.client.get(url)
+            body = response.text
 
             return {
                 "success": True,
                 "url": str(response.url),
-                "status_code": status_code,
+                "status_code": response.status_code,
                 "headers": dict(response.headers),
                 "latency_ms": response.elapsed.total_seconds() * 1000,
-                "response_body": body_text,
-                "hashed_body": hashed_body,
-                "content_length": len(body_text),
+                "response_body": body,
+                "hashed_body": hashlib.sha256(body.encode()).hexdigest(),
+                "content_length": len(body)
             }
 
         except Exception as e:
             return {
                 "success": False,
-                "url": subdomain_target,
+                "url": url,
                 "status_code": 0,
                 "error": str(e),
                 "headers": {},
                 "latency_ms": None,
                 "response_body": "",
                 "hashed_body": None,
-                "content_length": 0,
+                "content_length": 0
             }
 
-    def hash_snippet(self, body):
-        if isinstance(body, bytes):
-            return hashlib.sha256(body).hexdigest()
-        else:
-            return hashlib.sha256(body.encode()).hexdigest()
+    async def close(self):
+        await self.client.aclose()
 
 class WarmUpModel:
     async def benign_request(self, target, domains:list, concurrency, timeout):
