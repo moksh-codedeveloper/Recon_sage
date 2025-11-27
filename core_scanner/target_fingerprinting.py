@@ -62,7 +62,7 @@ class PassiveFingerprint:
             return hashlib.sha256(snippet.encode()).hexdigest()
 
 class WarmUpModel:
-    async def benign_request(self, target, domains:list):
+    async def benign_request(self, target, domains:list, concurrency, timeout):
         list_concurrency = []
         list_timeout = []
         if len(domains) >= 5:
@@ -75,7 +75,7 @@ class WarmUpModel:
                     return resp
                 for domain in domains:
                     resp = await check_url(target=target, domains=domain)
-                    aimd_calculator = AIMDConcurrencyDataGather(target_url=target, status_code=resp.status_code, current_concurrency_limit=100, current_timeout_limit=10)
+                    aimd_calculator = AIMDConcurrencyDataGather(target_url=target, status_code=resp.status_code, current_concurrency_limit=concurrency, current_timeout_limit=timeout)
                     aimd_result = aimd_calculator.aimd_calculator()
                     # return (aimd_result, aimd_calculator.data_to_dict())
                     list_concurrency.append(aimd_result["new_concurrency"])
@@ -86,4 +86,7 @@ class WarmUpModel:
                 }
         except Exception as e:
             print("There is some unexpected error with the target request", e)
-            return False
+            return {
+                "message" : f"You are having the scan exception :- {e}",
+                "success" : False
+            }

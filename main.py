@@ -1,9 +1,12 @@
 # main.py
-from fastapi import FastAPI, HTTPException
+import statistics
+from fastapi import FastAPI
 from pydantic import BaseModel
 from core_scanner.main_scanner import Scanner
 import uvicorn
 import logging
+
+from core_scanner.target_fingerprinting import WarmUpModel
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("reconsage_main")
@@ -31,37 +34,17 @@ def home():
         "Note": "this is one endpoint but lets be real we can make this even more powerful"
     }
 
-
-@app.post("/api/v1/scan")
-async def run_scan(target: Target):
-    try:
-        scanner = Scanner(
-            target=target.target,
-            wordlist_1=target.wordlist,
-            wordlist_2=target.wordlist_2,
-            json_file_path=target.json_file_path,
-            json_file_name=target.json_file_name,
-            timeout=target.timeout,
-            concurrency=target.concurrency
-        )
-    except ValueError as e:
-        # bad input from client
-        raise HTTPException(status_code=400, detail=str(e))
-
-    try:
-        result = await scanner.run_scan()
-    except Exception as e:
-        # unexpected internal error -> return a friendly JSON error
-        logger.exception("Unhandled exception while running scan")
-        raise HTTPException(status_code=500, detail="Internal server error during scan")
-
-    # If scanner returns an error structure (your run_scan returns it), forward as 400
-    if isinstance(result, dict) and result.get("status") and result["status"] != 200:
-        # Keep structure, but send 400 so clients know it failed
-        raise HTTPException(status_code=400, detail=result)
-
-    return result
-
+@app.post("/scan")
+async def main_scan(target:Target):
+    warmup_scanner = WarmUpModel()
+    scan_result = await warmup_scanner.benign_request(target=target.target, domains=["/secret.txt", "/favicon.ico", "/secrets/secret.txt"], concurrency=target.concurrency, timeout=target.timeout)
+    concurrency_rate = scan_result["calculated_concurrency"]
+    timeout_rate = scan_result["calculated_timeout"]
+    concurrency = int(statistics.median(concurrency_rate))
+    timeout = int(statistics.median(timeout_rate))
+    scan_model = Scanner(target=target.target, wordlist_1=target.wordlist, wordlist_2=target.wordlist_2, json_file_name=target.json_file_name, json_file_path=target.json_file_path, concurrency=concurrency, timeout=timeout)
+    main_scan_result = await scan_model.run_scan()
+    return main_scan_result
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
