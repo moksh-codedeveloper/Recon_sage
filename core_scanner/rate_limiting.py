@@ -1,6 +1,6 @@
 from core_scanner.target_fingerprinting import PassiveFingerprint
 import asyncio 
-from json_logger import JSONLogger
+from .json_logger import JSONLogger
 
 class RateLimitDetector:
     def __init__(self, target, list_dirs, concurrency, timeout, json_file_path, json_file_name):
@@ -14,7 +14,8 @@ class RateLimitDetector:
     
     async def scan_batch(self):
         batch = {}
-        
+        if len(self.list_of_dirs) > 10:
+            raise Exception("Bro you passed the list too long then it was intend to be")
         try:
             pf = PassiveFingerprint(
                 target=self.target, 
@@ -112,15 +113,19 @@ class RateLimitDetector:
             "all_urls": all_urls_scanned,
             "has_rate_limited": has_rate_limited
         }
-        
+        message = "It is not rate limited after all the detections checks"
         # Log to file
         rate_limit_logger = JSONLogger(
             json_file_path=self.json_file_path, 
             json_file_name=self.json_file_name
         )
         rate_limit_logger.log_to_file(result)
+        if has_rate_limited:
+            message = "It is rate limited :) buddy" 
         
         return {
             "message": "Rate limit detection scan complete. Check JSON file for full report.",
+            "is_it_rate_limited" : has_rate_limited,
+            "rate_limitation_message" : message,
             "result": result,
         }

@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from core_scanner.main_scanner import Scanner
 import uvicorn
-
+from core_scanner.rate_limiting import RateLimitDetector
 from core_scanner.target_fingerprinting import WarmUpModel
 
 class Target(BaseModel):
@@ -44,6 +44,35 @@ async def main_scan(target:Target):
         "concurrency" : concurrency,
         "timeout" : timeout
     }
+
+class RateLimit(BaseModel):
+    target: str
+    timeout:int
+    concurrency:int
+    json_file_name: str
+    json_file_path:str
+
+@app.post("/rate/limit")
+async def scan_for_rate_limits(rate_limit:RateLimit):
+    warmup_model = WarmUpModel()
+    scan_result = await warmup_model.benign_request(target=rate_limit.target, domains=["", "secrets.txt", "login.php", "/favicon.ico"], concurrency=rate_limit.concurrency, timeout=rate_limit.timeout)
+    concurrency_rate = scan_result["calculated_concurrency"]
+    timeout_rate = scan_result["calculated_timeout"]
+    concurrency = int(statistics.median(concurrency_rate))
+    timeout = int(statistics.median(timeout_rate))
+    rate_limit_scanner = RateLimitDetector(
+        target=rate_limit.target,
+        timeout=timeout,
+        concurrency=concurrency,
+        json_file_name=rate_limit.json_file_name,
+        json_file_path=rate_limit.json_file_path,
+        list_dirs=["", "secrets.txt", "login.php", "/favicon.ico", "secrets/secrets.txt"]
+    )
+    batch_result = await rate_limit_scanner.scan_batch()
+    detect_rate_limit_result = rate_limit_scanner.detect_rate_limited(batch=batch_result)
+    return detect_rate_limit_result
+
+
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

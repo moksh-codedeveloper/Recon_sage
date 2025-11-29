@@ -89,6 +89,6 @@ class WarmUpModel:
         except Exception as e:
             print("There is some unexpected error with the target request", e)
             return {
-                "message" : f"You are having the scan exception :- {e}",
-                "success" : False
+                "calculated_concurrency" : [],
+                "calculated_timeout" : []
             }
