@@ -1,3 +1,5 @@
+# core_scanner/rate_limiting.py
+
 from core_scanner.target_fingerprinting import PassiveFingerprint
 import asyncio 
 from .json_logger import JSONLogger
@@ -13,9 +15,9 @@ class RateLimitDetector:
         self.json_file_path = json_file_path
     
     async def scan_batch(self):
+        """Scan batch of URLs and collect response data"""
         batch = {}
-        if len(self.list_of_dirs) > 10:
-            raise Exception("Bro you passed the list too long then it was intend to be")
+        
         try:
             pf = PassiveFingerprint(
                 target=self.target, 
@@ -33,24 +35,62 @@ class RateLimitDetector:
             all_result = await asyncio.gather(*tasks)
             await pf.close()
             
+            # Case-insensitive header getter
+            def get_header_ci(headers, name):
+                """Get header case-insensitively (GitHub uses lowercase)"""
+                name_lower = name.lower()
+                for key, value in headers.items():
+                    if key.lower() == name_lower:
+                        return value
+                return None
+            
             for results in all_result:
+                # Skip failed requests
                 if not results.get("success", False):
                     continue
+                
+                headers = results.get("headers", {})
                 
                 batch[results["url"]] = {
                     "status_code": results["status_code"],
                     "latency_ms": results["latency_ms"] or 0,
-                    "retry_after_headers": results["headers"].get("Retry-After"),
-                    "rate_limit_remaining_header": results["headers"].get("X-RateLimit-Remaining")
+                    "retry_after_headers": get_header_ci(headers, "Retry-After"),
+                    "rate_limit_remaining_header": get_header_ci(headers, "X-RateLimit-Remaining")
                 }
             
             return batch
         
         except Exception as e:
             print(f"Exception in rate limit scan: {e}")
-            return {}  # Return empty batch
+            return {}  # Return empty dict, not None
     
     def detect_rate_limited(self, batch):
+        """Analyze batch for rate limiting patterns"""
+        
+        # Handle None or empty batch
+        if not batch or not isinstance(batch, dict):
+            result = {
+                "all_status_codes": [],
+                "all_latencies": [],
+                "all_retry_after_headers": [],
+                "all_rate_limit_remaining_headers": [],
+                "all_urls": [],
+                "has_rate_limited": False
+            }
+            
+            rate_limit_logger = JSONLogger(
+                json_file_path=self.json_file_path, 
+                json_file_name=self.json_file_name
+            )
+            rate_limit_logger.log_to_file(result)
+            
+            return {
+                "message": "Scan failed - no data collected",
+                "is_it_rate_limited": False,
+                "rate_limitation_message": "No valid batch data to analyze",
+                "result": result
+            }
+        
         all_statuses = []
         all_latencies = []
         all_retry_after_headers = []
@@ -66,11 +106,11 @@ class RateLimitDetector:
             all_rate_limit_remaining_headers.append(data["rate_limit_remaining_header"])
             all_urls_scanned.append(url)
         
-        # Check 1: Direct rate limit status codes
+        # Check 1: Direct rate limit status codes (429, 403, 503, etc.)
         if any(status in self.list_of_rate_limits_codes for status in all_statuses):
             has_rate_limited = True
         
-        # Check 2: Status code transitions (200 -> 429, etc.)
+        # Check 2: Status code transitions (200 -> 429/403/etc.)
         if len(all_statuses) >= 2:
             for i in range(1, len(all_statuses)):
                 prev_status = all_statuses[i-1]
@@ -80,10 +120,10 @@ class RateLimitDetector:
                     has_rate_limited = True
                     break
         
-        # Check 3: Latency spike detection
+        # Check 3: Latency spike detection (soft throttling)
         if len(all_latencies) > 0:
             valid_latencies = [l for l in all_latencies if l > 0]
-            if len(valid_latencies) >= 3:  # Need at least 3 for meaningful median
+            if len(valid_latencies) >= 3:  # Need at least 3 samples for meaningful median
                 sorted_lat = sorted(valid_latencies)
                 median = sorted_lat[len(sorted_lat) // 2]
                 max_lat = max(valid_latencies)
@@ -95,7 +135,7 @@ class RateLimitDetector:
         if any(header is not None for header in all_retry_after_headers):
             has_rate_limited = True
         
-        # Check 5: Rate limit remaining = 0
+        # Check 5: Rate limit remaining counter at zero
         for remaining in all_rate_limit_remaining_headers:
             if remaining is not None:
                 try:
@@ -109,23 +149,27 @@ class RateLimitDetector:
             "all_status_codes": all_statuses,
             "all_latencies": all_latencies,
             "all_retry_after_headers": all_retry_after_headers,
-            "all_rate_limit_remaining_headers": all_rate_limit_remaining_headers,  # Fixed typo
+            "all_rate_limit_remaining_headers": all_rate_limit_remaining_headers,
             "all_urls": all_urls_scanned,
             "has_rate_limited": has_rate_limited
         }
-        message = "It is not rate limited after all the detections checks"
+        
         # Log to file
         rate_limit_logger = JSONLogger(
             json_file_path=self.json_file_path, 
             json_file_name=self.json_file_name
         )
         rate_limit_logger.log_to_file(result)
+        
+        # Build response message
         if has_rate_limited:
-            message = "It is rate limited :) buddy" 
+            rate_message = "Rate limit detected based on status codes, headers, or latency patterns"
+        else:
+            rate_message = "No rate limiting detected after all checks"
         
         return {
             "message": "Rate limit detection scan complete. Check JSON file for full report.",
-            "is_it_rate_limited" : has_rate_limited,
-            "rate_limitation_message" : message,
-            "result": result,
+            "is_it_rate_limited": has_rate_limited,
+            "rate_limitation_message": rate_message,
+            "result": result
         }

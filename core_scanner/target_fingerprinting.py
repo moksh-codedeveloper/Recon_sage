@@ -62,33 +62,57 @@ class PassiveFingerprint:
 
     async def close(self):
         await self.client.aclose()
+# core_scanner/target_fingerprinting.py (WarmUpModel)
 
 class WarmUpModel:
-    async def benign_request(self, target, domains:list, concurrency, timeout):
+    async def benign_request(self, target, domains: list, concurrency, timeout):
         list_concurrency = []
         list_timeout = []
-        if len(domains) >= 5:
-            raise Exception("Bro you passed too much big domain list i just want 5 of that list this is not main scan this is the warm up scan")
+        
+        if len(domains) > 5:
+            raise Exception("Domain list too large (max 5)")
+        
         try:
-            async with httpx.AsyncClient() as client:
-                async def check_url(target, domains):
-                    new_target = target + domains
-                    resp = await client.get(new_target)
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                async def check_url(target, domain):
+                    # Ensure proper URL construction
+                    target = target.rstrip("/")
+                    if not domain.startswith("/"):
+                        domain = "/" + domain
+                    
+                    url = target + domain
+                    resp = await client.get(url)
                     return resp
+                
                 for domain in domains:
-                    resp = await check_url(target=target, domains=domain)
-                    aimd_calculator = AIMDConcurrencyDataGather(target_url=target, status_code=resp.status_code, current_concurrency_limit=concurrency, current_timeout_limit=timeout)
-                    aimd_result = aimd_calculator.aimd_calculator()
-                    # return (aimd_result, aimd_calculator.data_to_dict())
-                    list_concurrency.append(aimd_result["new_concurrency"])
-                    list_timeout.append(aimd_result["new_timeout"])
-                return {
-                    "calculated_concurrency" : list_concurrency,
-                    "calculated_timeout" : list_timeout
-                }
-        except Exception as e:
-            print("There is some unexpected error with the target request", e)
+                    try:
+                        resp = await check_url(target, domain)
+                        
+                        aimd_calculator = AIMDConcurrencyDataGather(
+                            target_url=target,
+                            status_code=resp.status_code,
+                            current_concurrency_limit=concurrency,
+                            current_timeout_limit=timeout
+                        )
+                        aimd_result = aimd_calculator.aimd_calculator()
+                        
+                        list_concurrency.append(aimd_result["new_concurrency"])
+                        list_timeout.append(aimd_result["new_timeout"])
+                    
+                    except Exception as e:
+                        print(f"Warmup request failed for {domain}: {e}")
+                        continue
+            
             return {
-                "calculated_concurrency" : [],
-                "calculated_timeout" : []
+                "calculated_concurrency": list_concurrency,
+                "calculated_timeout": list_timeout,
+                "success": len(list_concurrency) > 0
+            }
+        
+        except Exception as e:
+            print(f"Warmup error: {e}")
+            return {
+                "calculated_concurrency": [],
+                "calculated_timeout": [],
+                "success": False
             }
