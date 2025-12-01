@@ -26,13 +26,21 @@ class WafDetection:
             async with sem:
                 async with httpx.AsyncClient(timeout=self.timeout) as client:
                     resp = await client.get(subdirector_target)
-                    success_logs = {
-                        "url" : resp.url,
+                    return {
+                        "message" : "Your scan results are this and the waf detection scan has done its job",
+                        "url" : str(resp.url),
                         "status_code" : resp.status_code,
-                        "headers" : resp.headers,
+                        "headers" : dict(resp.headers),
                         "latency_ms" : resp.elapsed.total_seconds(),
-                        "hashed_body" : hashlib.sha256(resp.text.encode()).hexdigest()
+                        "hashed_body" : str(hashlib.sha256(resp.text.encode()).hexdigest())
                     }
-                    return success_logs
         except Exception as e:
             print(f"DEBUG :- this logs are for the exception which has occured in the waf modules {e}")
+            return {
+                "message" : "Your scan is facing an exception and here is what i have not found",
+                "url" : "",
+                "status_code": 0,
+                "headers" : {},
+                "latency_ms" : 0,
+                "hashed_body" : ""
+            }
