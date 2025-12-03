@@ -2,7 +2,7 @@ import ssl
 import asyncio
 import hashlib
 import httpx
-
+from core_scanner.json_logger import JSONLogger
 class WafDetection:
     def __init__(self, target, wordlist, json_file_path, json_file_name, timeout, concurrency) -> None:
         self.target = target
@@ -12,9 +12,6 @@ class WafDetection:
         self.timeout = timeout
         self.concurrency = concurrency
         self.sem = asyncio.Semaphore(self.concurrency)
-
-    def wordlist_words_extractor(self) -> list[str]:
-        return list(self.wordlist)
 
     async def fingerprint_target(self, domain) -> dict[str, object]:
 
@@ -64,12 +61,14 @@ class WafDetection:
                 "error_message": str(e)
             }
 
-    async def run_scan(self) -> dict[str, dict]:
-        wordlist_data = self.wordlist_words_extractor()
+    async def run_scan(self) -> dict[str, object]:
         target_result = {}
-
+        all_statuses = []
+        all_urls = []
+        all_latencies = []
+        
         try:
-            tasks = [self.fingerprint_target(domain=domain) for domain in wordlist_data]
+            tasks = [self.fingerprint_target(domain=domain) for domain in self.wordlist]
             results = await asyncio.gather(*tasks)
 
             for result in results:
@@ -87,9 +86,29 @@ class WafDetection:
                     "message": result["message"],
                     "tls_info": result["tls_info"]
                 }
+                all_urls.append(result["url"])
+                all_statuses.append(result["status_code"])
+                all_latencies.append(result["latency_ms"])
 
-            return target_result
-
+            success_logs_file = {
+                "message" : "This logs are report for the success json files",
+                "target_result" :  target_result
+            }
+            success_logger = JSONLogger(json_file_path=self.json_file_path, json_file_name=self.json_file_name)
+            success_logger.log_to_file(success_logs_file)
+            return {
+                "message" : "The scan is complete for headers please read the report json file genearated from the scan",
+                "status_codes" : all_statuses,
+                "latencies_ms" : all_latencies,
+                "all_urls" : all_urls
+            }
         except Exception as e:
             print(f"DEBUG (run_scan exception): {e}")
-            return {}
+            return {
+                "message" : "The scan has failed unfortunately please start again with the proper network and proper permissions",
+                "status_codes": [],
+                "latencies_ms" : [],
+                "all_urls" : [],
+                "error_message" : f"The error reason message is this  :- {e}",
+                "status_code" : 0
+            }

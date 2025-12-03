@@ -7,6 +7,7 @@ from core_scanner.main_scanner import Scanner
 import uvicorn
 from core_scanner.rate_limiting import RateLimitDetector
 from core_scanner.target_fingerprinting import WarmUpModel
+from waf_scanner_module.waf_detection import WafDetection
 
 class Target(BaseModel):
     target: str
@@ -135,6 +136,50 @@ async def scan_for_rate_limits(rate_limit: RateLimit):
             "message": "Rate limit scan failed",
             "success": False
         }
+
+class WafModel(BaseModel):
+    target:str
+    wordlist:list
+    json_file_name:str
+    json_file_path:str
+    concurrency:int
+    timeout:int
+    
+@app.post("/waf/scan")
+async def waf_scan(waf_model:WafModel):
+    warm_up = WarmUpModel()
+    benign_req = await warm_up.benign_request(
+        waf_model.target, 
+        waf_model.wordlist, 
+        waf_model.concurrency, 
+        waf_model.timeout
+    )
+   
+    concurrency_rate = benign_req["calculated_concurrency"]
+    timeout_rate = benign_req["calculated_timeout"]
+
+    # Safe defaults
+    concurrency = 100
+    timeout = 10
+
+    # Only calculate median if lists are not empty
+    if concurrency_rate and len(concurrency_rate) > 0:
+        concurrency = statistics.median(concurrency_rate)
+    
+    if timeout_rate and len(timeout_rate) > 0:
+        timeout = statistics.median(timeout_rate)
+
+    waf_detection_obj = WafDetection(
+        target=waf_model.target, 
+        wordlist=waf_model.wordlist, 
+        json_file_name=waf_model.json_file_name, 
+        json_file_path=waf_model.json_file_path , 
+        concurrency=concurrency, 
+        timeout=timeout
+    )
+
+    scan_result = await waf_detection_obj.run_scan()
+    return scan_result
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
