@@ -1,104 +1,56 @@
-import json
-import os
+
+# Class Model of the false positive detector 
+
 import asyncio
-from urllib.parse import urlparse
+import hashlib
+import json
+
+import httpx
 
 from core_scanner.target_fingerprinting import PassiveFingerprint
 
 
 class FalseDetector:
-    def __init__(self, target, json_full_path, json_file_name, timeout, concurrency):
-        self.target = target
-        self.json_file_name = json_file_name
-        self.json_full_path = json_full_path
-        self.json_file_path = os.path.join(self.json_file_name, self.json_full_path)
-        self.timeout = timeout
+    def __init__(self, target, json_file_name, json_file_path, concurrency, timeout):
+        self.target = target 
+        self.json_file_name  = json_file_name
+        self.json_file_path = json_file_path
         self.concurrency = concurrency
-
-    def read_json_file(self):
+        self.timeout = timeout
+        
+    def read_scan(self, json_file_to_read) -> dict[str, object]:
         try:
-            with open(self.json_file_path, "r", encoding='utf-8') as f:
+            with open(json_file_to_read, "r", encoding='utf-8') as f:
                 return json.load(f)
-        except FileNotFoundError:
-            raise FileNotFoundError(
-                "Provided JSON file not found. Check your path again."
-            )
-
-    async def scanner_module(self):
-        false_positive_score = 0
-        pf = PassiveFingerprint(self.target, self.timeout, self.concurrency)
-
-        read_json_file_result = self.read_json_file()
-        success_urls = read_json_file_result.get("successfully_accessed_urls", [])
-
-        # -------------------------------
-        # Convert full URLs → paths only
-        # -------------------------------
-        domains_to_scan = []
-        for full_url in success_urls:
-            parsed = urlparse(full_url)
-            path = parsed.path if parsed.path else "/"
-            domains_to_scan.append(path)
-
-        # Shared maps
-        common_hashed_body = {}
-        common_content_length = {}
-
-        # -------------------------------
-        # REAL CONCURRENCY + SHARED CLIENT
-        # -------------------------------
+        except Exception as e:
+            print(f'An exception occurred:- {e}')
+            return {}
+    
+    async def scan_for_false_detection(self, json_file_to_read): 
+        logs_of_url = self.read_scan(json_file_to_read=json_file_to_read)
+        if not isinstance(logs_of_url, dict):
+            raise ValueError("I think there is error has occured because the passes value is not the expected it should be the dictionary or json file but its not i don't know what the heck you are trying to pass")
+        # successful_urls:list = list(logs_of_url.get("success_urls"), [])
+        successful_urls = logs_of_url["success_urls"]
+        if not isinstance(successful_urls, list):
+            raise ValueError("The passed value or stored value in the json has no list its something else not list but we want the list for traversal")
+        
         sem = asyncio.Semaphore(self.concurrency)
+        async with sem :
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                async def req_urls(urls):
+                    resp_target = await client.get(urls)
+                    hashed_body = hashlib.sha256(resp_target.text.encode()).hexdigest()
+                    return {
+                        "url" : resp_target.url,
+                        "hashed_body" : hashed_body,
+                        "status_code" : resp_target.status_code,
+                        "content_length" : len(resp_target.text)
+                    }
+        
+        tasks = [req_urls(u) for u in successful_urls]
+        result = await asyncio.gather(*tasks)
 
-        async def bounded_false_scan(domain):
-            async with sem:
-                return await pf.scan_data(domain)
-
-        tasks = [bounded_false_scan(domain) for domain in domains_to_scan]
-        scan_results = await asyncio.gather(*tasks)
-
-        # -------------------------------
-        # Process results
-        # -------------------------------
-        for scanned_result in scan_results:
-            url = scanned_result["url"]
-            body = scanned_result.get("response_body", "")
-            hashed_body = pf.hash_snippet(body)
-            content_length = scanned_result.get("content_length", 0)
-
-            # HASH BUCKETS
-            if hashed_body not in common_hashed_body:
-                common_hashed_body[hashed_body] = [url]
-            else:
-                common_hashed_body[hashed_body].append(url)
-
-            # CONTENT LENGTH BUCKETS
-            if content_length not in common_content_length:
-                common_content_length[content_length] = [url]
-            else:
-                common_content_length[content_length].append(url)
-
-        # -------------------------------
-        # Detect false positives
-        # -------------------------------
-        false_positive_detected_hash_urls = {}
-        false_positive_detected_content_url = {}
-
-        for hashed_response, urls in common_hashed_body.items():
-            if len(urls) >= 3:   # threshold tuned
-                false_positive_score += 10
-                false_positive_detected_hash_urls[hashed_response] = urls
-
-        for length, urls in common_content_length.items():
-            if len(urls) >= 5:   # threshold tuned
-                false_positive_score += 10
-                false_positive_detected_content_url[length] = urls
-
-        # -------------------------------
-        # Final return
-        # -------------------------------
-        return {
-            "message": "False-positive analysis completed.",
-            "false_positive_detected_from_hashes": false_positive_detected_hash_urls,
-            "false_positive_detected_from_content_length": false_positive_detected_content_url,
-            "false_positive_score": false_positive_score,
-        }
+        check_content_length = {}
+        check_hashed_body = {}
+        

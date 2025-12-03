@@ -3,7 +3,7 @@
 import statistics
 from fastapi import FastAPI
 from pydantic import BaseModel
-from core_scanner.false_limit_detection import FalseDetector
+# from core_scanner.false_limit_detection import FalseDetector
 from core_scanner.main_scanner import Scanner
 import uvicorn
 from core_scanner.rate_limiting import RateLimitDetector
@@ -189,17 +189,17 @@ class FalseDetectorModel(BaseModel):
     timeout:int
     concurrency:int
 
-@app.post("/false/detector")
-async def false_scanner(false_detector_model:FalseDetectorModel):
-    false_detector_obj = FalseDetector(
-        target= false_detector_model.target,
-        concurrency=false_detector_model.concurrency,
-        json_full_path=false_detector_model.json_full_path,
-        json_file_name=false_detector_model.json_file_name,
-        timeout=false_detector_model.timeout
-    )
-    scan_result = false_detector_obj.scanner_module()
-    return scan_result
+# @app.post("/false/detector")
+# async def false_scanner(false_detector_model:FalseDetectorModel):
+#     false_detector_obj = FalseDetector(
+#         target= false_detector_model.target,
+#         concurrency=false_detector_model.concurrency,
+#         json_full_path=false_detector_model.json_full_path,
+#         json_file_name=false_detector_model.json_file_name,
+#         timeout=false_detector_model.timeout
+#     )
+#     scan_result = false_detector_obj.scanner_module()
+#     return scan_result
 
 
 if __name__ == "__main__":
