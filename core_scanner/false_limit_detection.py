@@ -11,59 +11,62 @@ class FalseDetector:
         self.concurrency = concurrency
         self.timeout = timeout
 
-    def read_scan(self, json_file_to_read):
+    def read_json_file(self, json_file_to_read) -> dict[str, object]:
         try:
             with open(json_file_to_read, "r", encoding='utf-8') as f:
                 return json.load(f)
         except Exception as e:
-            print(f"Error reading JSON: {e}")
+            print(f"This is exception from the read json method from the false detector and here is the message {e}")
             return {}
-
-    async def scan_for_false_detection(self, json_file_to_read):
-        logs = self.read_scan(json_file_to_read)
-        if not isinstance(logs, dict):
-            raise ValueError("Expected JSON dict")
-
-        successful_urls = logs.get("success_urls", [])
-        if not isinstance(successful_urls, list):
-            raise ValueError("success_urls must be a list")
-
-        sem = asyncio.Semaphore(self.concurrency)
-
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-
-            async def fetch(url):
-                async with sem:
-                    r = await client.get(url)
-                    body_hash = hashlib.sha256(r.text.encode()).hexdigest()
-                    return {
-                        "url": str(r.url),
-                        "hash": body_hash,
-                        "len": len(r.text),
-                        "code": r.status_code,
-                    }
-
-            results = await asyncio.gather(*[fetch(u) for u in successful_urls])
-
-        hash_groups = {}
-        len_groups = {}
-
-        for res in results:
-            hash_groups.setdefault(res["hash"], []).append(res["url"])
-            len_groups.setdefault(res["len"], []).append(res["url"])
-
-        score = 0
-
-        # If many URLs have identical content → false positives likely
-        if any(len(urls) > 2 for urls in hash_groups.values()):
-            score += 10
-
-        if any(len(urls) > 3 for urls in len_groups.values()):
-            score += 10
-
-        return {
-            "message": "False detection analysis complete.",
-            "unique_hashes": len(hash_groups),
-            "unique_lengths": len(len_groups),
-            "false_positive_score": score
-        }
+    async def execute_scan(self, json_file_to_read):
+        all_common_urls_from_hashed_body = []
+        all_common_urls_from_content_length = []
+        common_hashed_body = {}
+        common_content_length = {}
+        try:
+            file_json = dict(self.read_json_file(json_file_to_read))
+            success_urls = file_json.get("success_urls")
+            if not isinstance(success_urls, list):
+                raise ValueError("The passed json file has the success urls but not in the array form which is expected here and also needed by this module")
+            
+            sem = asyncio.Semaphore(self.concurrency)
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                async def fetch(target) :
+                    async with sem:
+                        resp = await client.get(url=target)
+                        return {
+                            "status_code" : resp.status_code, 
+                            "urls" : resp.url,
+                            "hashed_body" : hashlib.sha256(resp.text.encode()).hexdigest(),
+                            "content_length": len(resp.text)
+                        }
+                fetch_result = await asyncio.gather(*[fetch(url) for url in success_urls])
+            for key in fetch_result:
+                if key["hashed_body"] not in common_hashed_body:
+                    common_hashed_body[key["hashed_body"]] = []
+                common_hashed_body[key["hashed_body"]].append(key["urls"])
+            for content_length in fetch_result:
+                if content_length["content_length"] not in common_content_length:
+                    common_content_length[content_length["content_length"]] = []
+                common_content_length[content_length["content_length"]].append(content_length["urls"])
+            
+            for urls in common_hashed_body.values():
+                if len(urls) > 2:
+                    all_common_urls_from_hashed_body.append(urls)
+            
+            for urls in common_content_length.values():
+                if len(urls) >= 11:
+                    all_common_urls_from_content_length.append(urls)
+            
+            return{
+                "length_of_hashed_body_common_urls": len(all_common_urls_from_hashed_body),
+                "length_of_content_length_common_urls" : len(all_common_urls_from_content_length),
+                "message" : "For more detailed summary on what exact urls are false positive please visit the json logs and carry on your research on them"
+            }
+        except Exception as e:
+            print("There is some exception which has occured in the scan part of the false detector", e)
+            return {
+                "length_of_hashed_body_common_urls" : [],
+                "length_of_content_length_common_urls": [],
+                "message" : f"There is some issues with either the server side or the urls request please see the detailed errors and solve it by either restarting or check networks :- {e}"
+            }
