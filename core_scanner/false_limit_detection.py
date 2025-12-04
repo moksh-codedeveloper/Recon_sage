@@ -2,7 +2,7 @@ import asyncio
 import hashlib
 import json
 import httpx
-
+from core_scanner.json_logger import JSONLogger
 class FalseDetector:
     def __init__(self, target, json_file_name, json_file_path, concurrency, timeout):
         self.target = target
@@ -36,7 +36,7 @@ class FalseDetector:
                         resp = await client.get(url=target)
                         return {
                             "status_code" : resp.status_code, 
-                            "urls" : resp.url,
+                            "urls" : str(resp.url),
                             "hashed_body" : hashlib.sha256(resp.text.encode()).hexdigest(),
                             "content_length": len(resp.text)
                         }
@@ -57,7 +57,15 @@ class FalseDetector:
             for urls in common_content_length.values():
                 if len(urls) >= 11:
                     all_common_urls_from_content_length.append(urls)
-            
+            false_urls_logger = JSONLogger(json_file_name=self.json_file_name, json_file_path=self.json_file_path)
+            false_urls_logs = {
+                "message" : "This is the detailed report on what are the content based false positive and content length is included too",
+                "length_of_hashed_based_false" : len(all_common_urls_from_hashed_body),
+                "length_of_content_length_based_false" : len(all_common_urls_from_content_length),
+                "detailed_urls_from_common_hashed_body" : all_common_urls_from_hashed_body,
+                "detailed_urls_from_content_length_body" : all_common_urls_from_content_length
+            }
+            false_urls_logger.log_to_file(false_urls_logs)
             return{
                 "length_of_hashed_body_common_urls": len(all_common_urls_from_hashed_body),
                 "length_of_content_length_common_urls" : len(all_common_urls_from_content_length),
@@ -66,7 +74,7 @@ class FalseDetector:
         except Exception as e:
             print("There is some exception which has occured in the scan part of the false detector", e)
             return {
-                "length_of_hashed_body_common_urls" : [],
-                "length_of_content_length_common_urls": [],
+                "length_of_hashed_body_common_urls" : 0,
+                "length_of_content_length_common_urls": 0,
                 "message" : f"There is some issues with either the server side or the urls request please see the detailed errors and solve it by either restarting or check networks :- {e}"
             }
