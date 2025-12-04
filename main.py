@@ -1,5 +1,5 @@
 # main.py
-
+from core_scanner.false_limit_detection import FalseDetector
 import statistics
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -19,13 +19,6 @@ class Target(BaseModel):
     concurrency: int
     timeout: int
 
-class RateLimit(BaseModel):
-    target: str
-    timeout: int
-    concurrency: int
-    json_file_name: str
-    json_file_path: str
-
 app = FastAPI(title="ReconSage V1.1.5")
 
 @app.get("/")
@@ -35,7 +28,9 @@ def home():
         "Message": "Your scanner is working now lets start",
         "API Endpoints": {
             "scan": "/scan [POST]",
-            "rate_limit": "/rate/limit [POST]"
+            "rate_limit": "/rate/limit [POST]",
+            "waf_scan" : "/waf/scan [POST]",
+            "false_detector" : "/false/positive [POST]" 
         },
         "Note": "Built by 18yo hacker from India 🇮🇳🔥"
     }
@@ -83,13 +78,22 @@ async def main_scan(target: Target):
             "success": False
         }
 
+class RateLimit(BaseModel):
+    target: str
+    timeout: int
+    concurrency: int
+    json_file_name: str
+    json_file_path: str
+    domains : list
+    user_paths:list
+
 @app.post("/rate/limit")
 async def scan_for_rate_limits(rate_limit: RateLimit):
     try:
         warmup_model = WarmUpModel()
         scan_result = await warmup_model.benign_request(
             target=rate_limit.target, 
-            domains=["/users/github", "/users/torvalds", "/users/python"], 
+            domains=rate_limit.domains, 
             concurrency=rate_limit.concurrency, 
             timeout=rate_limit.timeout
         )
@@ -101,29 +105,29 @@ async def scan_for_rate_limits(rate_limit: RateLimit):
         concurrency = int(statistics.median(concurrency_rate)) if concurrency_rate else rate_limit.concurrency
         timeout = int(statistics.median(timeout_rate)) if timeout_rate else rate_limit.timeout
         
-        # Generate 50 GitHub user endpoints to test rate limiting
-        github_users = [
-            "torvalds", "gvanrossum", "github", "microsoft", "google",
-            "facebook", "nodejs", "rust-lang", "python", "tensorflow",
-            "apple", "amazon", "netflix", "spotify", "adobe",
-            "uber", "airbnb", "twitter", "meta", "oracle",
-            "ibm", "intel", "amd", "nvidia", "samsung",
-            "sony", "linux", "debian", "ubuntu", "fedora",
-            "redhat", "centos", "arch", "gentoo", "slack",
-            "discord", "zoom", "dropbox", "docker", "kubernetes",
-            "ansible", "terraform", "jenkins", "gitlab", "bitbucket",
-            "npm", "yarn", "webpack", "babel", "eslint"
-        ]
-        
-        user_paths = [f"/users/{user}" for user in github_users]
-        
+        # # Generate 50 GitHub user endpoints to test rate limiting
+        # github_users = [
+        #     "torvalds", "gvanrossum", "github", "microsoft", "google",
+        #     "facebook", "nodejs", "rust-lang", "python", "tensorflow",
+        #     "apple", "amazon", "netflix", "spotify", "adobe",
+        #     "uber", "airbnb", "twitter", "meta", "oracle",
+        #     "ibm", "intel", "amd", "nvidia", "samsung",
+        #     "sony", "linux", "debian", "ubuntu", "fedora",
+        #     "redhat", "centos", "arch", "gentoo", "slack",
+        #     "discord", "zoom", "dropbox", "docker", "kubernetes",
+        #     "ansible", "terraform", "jenkins", "gitlab", "bitbucket",
+        #     "npm", "yarn", "webpack", "babel", "eslint"
+        # ]
+     
+        # user_paths = [f"/users/{user}" for user in github_users]
+
         rate_limit_scanner = RateLimitDetector(
             target=rate_limit.target,
             timeout=timeout,
             concurrency=concurrency,
             json_file_name=rate_limit.json_file_name,
             json_file_path=rate_limit.json_file_path,
-            list_dirs=user_paths  # 50 requests - will trigger GitHub's 60/hour limit
+            list_dirs=rate_limit.user_paths  # 50 requests - will trigger GitHub's 60/hour limit
         )
         
         batch_result = await rate_limit_scanner.scan_batch()
@@ -188,19 +192,39 @@ class FalseDetectorModel(BaseModel):
     json_full_path:str
     timeout:int
     concurrency:int
+    json_file_to_read:str
+    list_of_targets:list
 
-# @app.post("/false/detector")
-# async def false_scanner(false_detector_model:FalseDetectorModel):
-#     false_detector_obj = FalseDetector(
-#         target= false_detector_model.target,
-#         concurrency=false_detector_model.concurrency,
-#         json_full_path=false_detector_model.json_full_path,
-#         json_file_name=false_detector_model.json_file_name,
-#         timeout=false_detector_model.timeout
-#     )
-#     scan_result = false_detector_obj.scanner_module()
-#     return scan_result
+@app.post("/false/positive")
+async def scan(false_detector_model:FalseDetectorModel):
+    warmup_model = WarmUpModel()
+    benign_req = await warmup_model.benign_request(
+        target=false_detector_model.target,
+        concurrency=false_detector_model.concurrency,
+        timeout=false_detector_model.timeout,
+        domains=false_detector_model.list_of_targets
+    )
+    
+    concurrency_rate = benign_req["calculated_concurrency"]
+    timeout_rate = benign_req["calculated_timeout"]
+    # Safe defaults
+    concurrency = 100
+    timeout = 10
 
+    # Only calculate median if lists are not empty
+    if concurrency_rate and len(concurrency_rate) > 0:
+        concurrency = statistics.median(concurrency_rate)
+    
+    if timeout_rate and len(timeout_rate) > 0:
+        timeout = statistics.median(timeout_rate)
+    false_detector_obj = FalseDetector(target=false_detector_model.target, json_file_name=false_detector_model.json_file_name, json_file_path=false_detector_model.json_full_path, concurrency=concurrency, timeout=timeout)
+    scan_result = await false_detector_obj.execute_scan(json_file_to_read=false_detector_model.json_file_to_read)    
+    
+    return {
+        "scan_result" : scan_result,
+        "concurrency_rate" : concurrency_rate,
+        "timeout_rate" : timeout_rate
+    }
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
