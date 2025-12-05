@@ -6,10 +6,9 @@ x-environment-defaults: &env_defaults
 
 services:
   reconsage:
-    image: mokshmalde/reconsage:v1.1.4
+    image: mokshmalde/reconsage:v1.9
     container_name: reconsage
-    restart: unless-stopped
-    network_mode: "host"              # Linux only
+    restart: unless-stopped             
     environment:
       - WORDLISTS_PATH=/wordlists
       - RECONSAGE_LOGS=/home/appuser/reconsage_logs
