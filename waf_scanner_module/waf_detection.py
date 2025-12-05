@@ -34,12 +34,12 @@ class WafDetection:
                             tls_version = ssl_object.version()
                             cipher_suite = ssl_object.cipher()
                             certificate = ssl_object.getpeercert()
-
+                    normalize_headers = {k.lower() :  v for k,  v in dict(resp.headers).items()} 
                     return {
                         "message": "Passive WAF scan completed",
                         "url": str(resp.url),
                         "status_code": resp.status_code,
-                        "headers": dict(resp.headers),
+                        "headers": normalize_headers,
                         "latency_ms": resp.elapsed.total_seconds() * 1000,
                         "hashed_body": hashlib.sha256(resp.content).hexdigest(),
                         "tls_info": {
@@ -112,3 +112,16 @@ class WafDetection:
                 "error_message" : f"The error reason message is this  :- {e}",
                 "status_code" : 0
             }
+    def check_for_cloudflare(self, headers:dict):
+        cloudflare_headers = ['cf-ray', 'cf-cache-status', 'cf-request-id', 'cf-connecting-ip', 'cf-ipcountry', 'cf-warp-tag-id', 'cf-bgj']
+        advanced_cloudflare_headers = ['cf-chl', 'cf-chl-bypasses', 'cf-chl-out', 'cf-mitigated', 'cf-turnstile', 'cf-challenge']
+        all_match_headers = {}
+        for key, value in headers.items():
+            if key in cloudflare_headers or key in advanced_cloudflare_headers:
+                all_match_headers[key] = value
+            if key == "server" and "cloudflare" in str(value).lower():
+                all_match_headers[key] = value
+        return {
+            "message" : "This are some headers key which matched with there values",
+            "matched_headers" : all_match_headers 
+        }
