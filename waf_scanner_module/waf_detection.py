@@ -125,3 +125,86 @@ class WafDetection:
             "message" : "This are some headers key which matched with there values",
             "matched_headers" : all_match_headers 
         }
+    
+    def fastly_headers(self, headers:dict):
+        fastly_headers_for_check = ['x-served-by', 'x-cached', 'x-cache-hits', 'fastly-debug-path', 'fastly-trace']
+        fastly_github_specific = ['x-github-request-id', 'x-ratelimit-limit', 'x-ratelimit-remaining', 'x-ratelimit-reset']
+        
+        all_matched_headers = {}
+        for key, value in headers.items():
+            if key in fastly_headers_for_check or key in fastly_github_specific:
+                all_matched_headers[key] = value
+            
+            if key == 'server' and "github.com" in str(value).lower():
+                all_matched_headers[key] = value
+            
+            if key == 'server' and 'varnish' in str(value).lower():
+                all_matched_headers[key] = value
+
+            if key == 'via' and '1.1 varnish' in str(value):
+                all_matched_headers[key] = value
+        
+        return {
+            "message" : "You have this result of the headers if this is present or empty",
+            "is_it_waf" : True if all_matched_headers != None or all_matched_headers != {} else False,
+            "headers" : all_matched_headers
+        }
+    
+    def other_waf_headers(self, headers:dict):
+        akamai_kona_headers = [
+            'akamai-pragma-client-region', 
+            'x-akamai-transformed', 
+            'x-akamai-request-id', 
+            'x-akamai-device-characteristics', 
+            'x-true-cache-key', 
+            'x-check-cacheable'
+            ] # server : "AkamaiGhost"
+        imperva_headers = [
+            'x-iinfo', 
+            'x-cdn', 
+            'x-incapsula', 
+            'x-cdn-request-id'
+            ] # via : 1.1 incapsula and x-frame-options : SAMEORIGIN and X-CDN : Imperva
+        aws_headers = [
+            'x-amz-cf-id',
+            'x-amz-cf-pop',
+            'x-amz-cf-paired-pop',
+            'x-amzn-trace-id',
+            'x-amzn-RequestId',
+            'x-amzn-ErrorType'
+        ]
+        
+        all_headers_matched_akamai = {}
+        all_headers_mached_imperva = {}
+        all_headers_matched_aws = {}
+        for key, values in headers.items():
+            if key in imperva_headers:
+                all_headers_mached_imperva[key] = values
+            
+            if key == 'x-cdn' and 'imperva' in str(values).lower():
+                all_headers_mached_imperva[key] = values
+            
+            if key == 'via' and '1.1 incapsula' in str(values).lower():
+                all_headers_mached_imperva[key] = values
+            
+            if key == 'x-frame-options' and 'sameorigin' in str(values).lower():
+                all_headers_mached_imperva[key] = values
+            
+            if key in akamai_kona_headers:
+                all_headers_matched_akamai[key] = values
+            
+            if key == "server" and "akamaighost" in str(values).lower():
+                all_headers_matched_akamai[key] = values 
+            
+            if key in aws_headers:
+                all_headers_matched_aws[key] = values
+            
+        return {
+            "message" : "You have the summary of result of here in below" ,
+            "is_it_waf_related_to_imperva" : True if all_headers_mached_imperva != None or all_headers_mached_imperva != {} else False,
+            "is_it_waf_related_to_aws" : True if all_headers_matched_aws != None or all_headers_matched_aws != {} else False,
+            "is_it_waf_related_to_akamai" : True if all_headers_matched_akamai != None or all_headers_matched_akamai != {} else False,
+            "akamai_headers" : all_headers_matched_akamai,
+            "aws_headers" : all_headers_matched_aws,
+            "imperva_headers" : all_headers_mached_imperva
+        }
