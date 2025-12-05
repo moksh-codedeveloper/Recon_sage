@@ -3,7 +3,7 @@ from core_scanner.false_limit_detection import FalseDetector
 import statistics
 from fastapi import FastAPI
 from pydantic import BaseModel
-# from core_scanner.false_limit_detection import FalseDetector
+
 from core_scanner.main_scanner import Scanner
 import uvicorn
 from core_scanner.rate_limiting import RateLimitDetector
@@ -104,23 +104,7 @@ async def scan_for_rate_limits(rate_limit: RateLimit):
         # Safe median with defaults
         concurrency = int(statistics.median(concurrency_rate)) if concurrency_rate else rate_limit.concurrency
         timeout = int(statistics.median(timeout_rate)) if timeout_rate else rate_limit.timeout
-        
-        # # Generate 50 GitHub user endpoints to test rate limiting
-        # github_users = [
-        #     "torvalds", "gvanrossum", "github", "microsoft", "google",
-        #     "facebook", "nodejs", "rust-lang", "python", "tensorflow",
-        #     "apple", "amazon", "netflix", "spotify", "adobe",
-        #     "uber", "airbnb", "twitter", "meta", "oracle",
-        #     "ibm", "intel", "amd", "nvidia", "samsung",
-        #     "sony", "linux", "debian", "ubuntu", "fedora",
-        #     "redhat", "centos", "arch", "gentoo", "slack",
-        #     "discord", "zoom", "dropbox", "docker", "kubernetes",
-        #     "ansible", "terraform", "jenkins", "gitlab", "bitbucket",
-        #     "npm", "yarn", "webpack", "babel", "eslint"
-        # ]
-     
-        # user_paths = [f"/users/{user}" for user in github_users]
-
+    
         rate_limit_scanner = RateLimitDetector(
             target=rate_limit.target,
             timeout=timeout,
