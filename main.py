@@ -2,22 +2,16 @@
 from core_scanner.false_limit_detection import FalseDetector
 import statistics
 from fastapi import FastAPI
-from pydantic import BaseModel
 
 from core_scanner.main_scanner import Scanner
 import uvicorn
 from core_scanner.rate_limiting import RateLimitDetector
 from core_scanner.target_fingerprinting import WarmUpModel
 from waf_scanner_module.waf_detection import WafDetection
-
-class Target(BaseModel):
-    target: str
-    wordlist: str
-    wordlist_2: str
-    json_file_path: str
-    json_file_name: str
-    concurrency: int
-    timeout: int
+from models_for_main import Target
+from models_for_main import RateLimit
+from models_for_main import WafModel 
+from models_for_main import FalseDetectorModel
 
 app = FastAPI(title="ReconSage V1.1.5")
 
@@ -78,14 +72,6 @@ async def main_scan(target: Target):
             "success": False
         }
 
-class RateLimit(BaseModel):
-    target: str
-    timeout: int
-    concurrency: int
-    json_file_name: str
-    json_file_path: str
-    domains : list
-    user_paths:list
 
 @app.post("/rate/limit")
 async def scan_for_rate_limits(rate_limit: RateLimit):
@@ -126,58 +112,40 @@ async def scan_for_rate_limits(rate_limit: RateLimit):
             "success": False
         }
 
-class WafModel(BaseModel):
-    target:str
-    wordlist:list
-    json_file_name:str
-    json_file_path:str
-    concurrency:int
-    timeout:int
-    
 @app.post("/waf/scan")
-async def waf_scan(waf_model:WafModel):
-    warm_up = WarmUpModel()
-    benign_req = await warm_up.benign_request(
-        waf_model.target, 
-        waf_model.wordlist, 
-        waf_model.concurrency, 
-        waf_model.timeout
+async def waf_scan_detect(waf_model:WafModel):
+    warmup_model = WarmUpModel()
+    benign_req = await warmup_model.benign_request(
+        target=waf_model.target,
+        concurrency=waf_model.concurrency,
+        timeout=waf_model.timeout,
+        domains=waf_model.domains
     )
-   
     concurrency_rate = benign_req["calculated_concurrency"]
     timeout_rate = benign_req["calculated_timeout"]
 
-    # Safe defaults
     concurrency = 100
     timeout = 10
-
-    # Only calculate median if lists are not empty
-    if concurrency_rate and len(concurrency_rate) > 0:
+    
+    if concurrency_rate != []:
         concurrency = statistics.median(concurrency_rate)
     
-    if timeout_rate and len(timeout_rate) > 0:
+    if timeout_rate != []:
         timeout = statistics.median(timeout_rate)
 
-    waf_detection_obj = WafDetection(
+    waf_model_obj = WafDetection(
         target=waf_model.target, 
-        wordlist=waf_model.wordlist, 
-        json_file_name=waf_model.json_file_name, 
-        json_file_path=waf_model.json_file_path , 
-        concurrency=concurrency, 
+        json_file_path=waf_model.json_file_path,
+        json_file_name=waf_model.json_file_name,
+        wordlist=waf_model.domains,
+        concurrency=concurrency,
         timeout=timeout
     )
-
-    scan_result = await waf_detection_obj.run_scan()
-    return scan_result
-
-class FalseDetectorModel(BaseModel):
-    target:str
-    json_file_name:str
-    json_full_path:str
-    timeout:int
-    concurrency:int
-    json_file_to_read:str
-    list_of_targets:list
+    waf_scan = waf_model_obj.run_scan()
+    return {
+        "message" : "This message is to say that the scan is complete and here is the result for the detailed logs and summary from the scan result",
+        "waf_scan" : waf_scan
+    }
 
 @app.post("/false/positive")
 async def scan(false_detector_model:FalseDetectorModel):
@@ -201,8 +169,16 @@ async def scan(false_detector_model:FalseDetectorModel):
     
     if timeout_rate and len(timeout_rate) > 0:
         timeout = statistics.median(timeout_rate)
-    false_detector_obj = FalseDetector(target=false_detector_model.target, json_file_name=false_detector_model.json_file_name, json_file_path=false_detector_model.json_full_path, concurrency=concurrency, timeout=timeout)
-    scan_result = await false_detector_obj.execute_scan(json_file_to_read=false_detector_model.json_file_to_read)    
+    false_detector_obj = FalseDetector(
+        target=false_detector_model.target, 
+        json_file_name=false_detector_model.json_file_name, 
+        json_file_path=false_detector_model.json_full_path, 
+        concurrency=concurrency, 
+        timeout=timeout
+    )
+    scan_result = await false_detector_obj.execute_scan(
+        json_file_to_read=false_detector_model.json_file_to_read
+    )    
     
     return {
         "scan_result" : scan_result,

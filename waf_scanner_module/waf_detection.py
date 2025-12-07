@@ -7,7 +7,7 @@ from core_scanner.json_logger import JSONLogger
 
 class WafDetection:
     def __init__(self, target, wordlist, json_file_path, json_file_name, timeout, concurrency):
-        self.target = target.rstrip("/")  # Remove trailing slash
+        self.target = target.rstrip("/")
         self.wordlist = wordlist
         self.json_file_name = json_file_name
         self.json_file_path = json_file_path
@@ -18,7 +18,6 @@ class WafDetection:
     async def fingerprint_target(self, domain):
         """Scan single endpoint and extract WAF fingerprints"""
         
-        # Ensure domain starts with /
         if not domain.startswith("/"):
             domain = "/" + domain
         
@@ -29,10 +28,7 @@ class WafDetection:
                 async with httpx.AsyncClient(timeout=self.timeout) as client:
                     resp = await client.get(url)
 
-                    # Extract TLS info
                     tls_info = self._extract_tls_info(resp)
-                    
-                    # Normalize headers to lowercase
                     normalized_headers = {k.lower(): v for k, v in dict(resp.headers).items()}
                     
                     return {
@@ -78,31 +74,40 @@ class WafDetection:
             return {}
 
     async def run_scan(self):
-        """Scan all endpoints and aggregate results"""
+        """Scan all endpoints and detect WAFs"""
         target_result = {}
         all_statuses = []
         all_urls = []
         all_latencies = []
+        waf_detection_logs = {}  # Simple: URL -> detection result
         
         try:
-            # Scan all domains concurrently
+            # Scan all domains
             tasks = [self.fingerprint_target(domain) for domain in self.wordlist]
             results = await asyncio.gather(*tasks)
 
             # Process results
             for result in results:
-                # Skip failed requests
                 if not result.get("success", False):
                     continue
 
                 url = result["url"]
+                headers = result["headers"]
+                
+                # Detect WAF (your Big 5)
+                waf_detection = self.detect_waf(headers)
+                
+                # Store scan data
                 target_result[url] = {
                     "status_code": result["status_code"],
                     "hashed_body": result["hashed_body"],
-                    "headers": result["headers"],
+                    "headers": headers,
                     "latency_ms": result["latency_ms"],
                     "tls_info": result["tls_info"]
                 }
+                
+                # Store WAF detection separately (simple dict)
+                waf_detection_logs[url] = waf_detection
                 
                 all_urls.append(url)
                 all_statuses.append(result["status_code"])
@@ -112,7 +117,8 @@ class WafDetection:
             log_data = {
                 "message": "WAF detection scan complete",
                 "total_scanned": len(all_urls),
-                "target_result": target_result
+                "target_result": target_result,
+                "waf_detection_logs": waf_detection_logs
             }
             
             logger = JSONLogger(
@@ -127,7 +133,8 @@ class WafDetection:
                 "total_scanned": len(all_urls),
                 "status_codes": all_statuses,
                 "latencies_ms": all_latencies,
-                "all_urls": all_urls
+                "all_urls": all_urls,
+                "waf_detection_logs": waf_detection_logs
             }
         
         except Exception as e:
@@ -140,32 +147,32 @@ class WafDetection:
                 "all_urls": [],
                 "error": str(e)
             }
-            
+
     def detect_waf(self, headers):
         """
-        Detect WAF from headers (master method)
-        Returns combined detection results
+        Detect WAF from headers
+        Returns simple dict with all detection results
         """
         cloudflare = self.check_cloudflare(headers)
         fastly = self.check_fastly(headers)
-        others = self.check_other_wafs(headers)
+        other_wafs = self.check_other_wafs(headers)
         
-        # Determine if ANY WAF detected
+        # Check if ANY WAF detected
         waf_detected = (
             cloudflare["is_cloudflare"] or
             fastly["is_fastly"] or
-            others["is_akamai"] or
-            others["is_imperva"] or
-            others["is_aws"]
+            other_wafs["is_akamai"] or
+            other_wafs["is_imperva"] or
+            other_wafs["is_aws"]
         )
         
         return {
             "waf_detected": waf_detected,
             "cloudflare": cloudflare,
             "fastly": fastly,
-            "akamai": others["akamai"],
-            "imperva": others["imperva"],
-            "aws": others["aws"]
+            "akamai": other_wafs["akamai"],
+            "imperva": other_wafs["imperva"],
+            "aws": other_wafs["aws"]
         }
 
     def check_cloudflare(self, headers):
@@ -190,8 +197,7 @@ class WafDetection:
         
         return {
             "is_cloudflare": bool(matched),
-            "matched_headers": matched,
-            "confidence": "high" if any(h in matched for h in cf_advanced) else "medium"
+            "matched_headers": matched
         }
     
     def check_fastly(self, headers):
@@ -226,19 +232,16 @@ class WafDetection:
     def check_other_wafs(self, headers):
         """Detect Akamai, Imperva, AWS WAFs"""
         
-        # Akamai signatures
         akamai_headers = [
             'akamai-pragma-client-region', 'x-akamai-transformed',
             'x-akamai-request-id', 'x-akamai-device-characteristics',
             'x-true-cache-key', 'x-check-cacheable'
         ]
         
-        # Imperva signatures
         imperva_headers = [
             'x-iinfo', 'x-cdn', 'x-incapsula', 'x-cdn-request-id'
         ]
         
-        # AWS signatures
         aws_headers = [
             'x-amz-cf-id', 'x-amz-cf-pop', 'x-amz-cf-paired-pop',
             'x-amzn-trace-id', 'x-amzn-requestid', 'x-amzn-errortype'
@@ -251,7 +254,7 @@ class WafDetection:
         for key, value in headers.items():
             value_lower = str(value).lower()
             
-            # Akamai detection
+            # Akamai
             if key in akamai_headers:
                 akamai_matched[key] = value
             elif key == "server" and "akamaighost" in value_lower:
@@ -259,7 +262,7 @@ class WafDetection:
             elif key == "via" and "akamai" in value_lower:
                 akamai_matched[key] = value
             
-            # Imperva detection
+            # Imperva
             if key in imperva_headers:
                 imperva_matched[key] = value
             elif key == 'x-cdn' and 'imperva' in value_lower:
@@ -267,7 +270,7 @@ class WafDetection:
             elif key == 'via' and 'incapsula' in value_lower:
                 imperva_matched[key] = value
             
-            # AWS detection
+            # AWS
             if key in aws_headers:
                 aws_matched[key] = value
         
@@ -276,15 +279,12 @@ class WafDetection:
             "is_imperva": bool(imperva_matched),
             "is_aws": bool(aws_matched),
             "akamai": {
-                "matched_headers": akamai_matched,
-                "confidence": "high" if len(akamai_matched) >= 2 else "medium"
+                "matched_headers": akamai_matched
             },
             "imperva": {
-                "matched_headers": imperva_matched,
-                "confidence": "high" if 'x-iinfo' in imperva_matched else "medium"
+                "matched_headers": imperva_matched
             },
             "aws": {
-                "matched_headers": aws_matched,
-                "confidence": "high" if 'x-amz-cf-id' in aws_matched else "medium"
+                "matched_headers": aws_matched
             }
         }
