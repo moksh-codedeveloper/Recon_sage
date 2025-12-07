@@ -119,7 +119,7 @@ async def waf_scan_detect(waf_model:WafModel):
         target=waf_model.target,
         concurrency=waf_model.concurrency,
         timeout=waf_model.timeout,
-        domains=waf_model.domains
+        domains=waf_model.wordlist
     )
     concurrency_rate = benign_req["calculated_concurrency"]
     timeout_rate = benign_req["calculated_timeout"]
@@ -137,11 +137,11 @@ async def waf_scan_detect(waf_model:WafModel):
         target=waf_model.target, 
         json_file_path=waf_model.json_file_path,
         json_file_name=waf_model.json_file_name,
-        wordlist=waf_model.domains,
+        wordlist=waf_model.wordlist,
         concurrency=concurrency,
         timeout=timeout
     )
-    waf_scan = waf_model_obj.run_scan()
+    waf_scan = await waf_model_obj.run_scan()
     return {
         "message" : "This message is to say that the scan is complete and here is the result for the detailed logs and summary from the scan result",
         "waf_scan" : waf_scan
