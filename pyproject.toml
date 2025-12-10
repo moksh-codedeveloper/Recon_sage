@@ -1,0 +1,7 @@
+[project]
+name = "recon-sage"
+version = "1.9.0"
+description = "This tool is made for making the reconnaisance feel like the babys job"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = []

@@ -291,7 +291,7 @@ class WafDetection:
        }
 
 class ActiveWafScan:
-    def __init__(self, target:str, json_file_name:str, json_file_path:str, wordlist:list):
+    def __init__(self, timeout, concurrency, target:str, json_file_name:str, json_file_path:str, wordlist:list, headers:dict, params:str):
         self.target = target
         self.json_file_name = json_file_name
         self.json_file_path = json_file_path
@@ -299,12 +299,17 @@ class ActiveWafScan:
             self.wordlist = wordlist
         else :
             self.wordlist = wordlist[:5]
-        
-    async def probe_target(self, timeout, headers, params, domain):
+        self.headers = headers
+        self.params = params
+        self.concurrency = concurrency
+        self.timeout = timeout
+        self.sem = asyncio.Semaphore(self.concurrency)
+
+    async def probe_target(self, domain):
         try:
-          async with httpx.AsyncClient(timeout=timeout) as client:
+          async with httpx.AsyncClient(timeout=self.timeout) as client:
             sub_target = self.target + domain
-            resp = await client.get(sub_target, headers=headers, params=params)
+            resp = await client.get(sub_target, headers=self.headers, params=self.params)
             return {
                 "url" : str(resp.url), 
                 "headers" : dict(resp.headers),
@@ -323,9 +328,9 @@ class ActiveWafScan:
                 "message" : f"There is some error which has occured here suggestion solve this and restart the scanning :- {e}"
             }
     
-    async def  harmless_request(self, timeout, domain):
+    async def  harmless_request(self, domain):
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
                 sub_target = self.target + domain
                 resp = await client.get(sub_target)
                 return {
@@ -347,3 +352,25 @@ class ActiveWafScan:
                 "latency_ms" : 0,
                 "timestamps" : datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
             }
+    async def run_scan(self, concurrency, headers, timeout, params):
+        target_result = {}
+        status_code_for_waf = [406, 419, 420,  429, 444, 450, 494, 499, 510, 521, 522, 523, 525, 526, 530]
+        try:
+            # target fingerprinting of the on-purpose harmful request (To see the server reaction)
+            async with self.sem:
+                tasks = [self.probe_target(domain) for domain in self.wordlist]
+                all_result = await asyncio.gather(*tasks)
+                for result in all_result:
+                    if result["status_code"] in status_code_for_waf:
+                        target_result[result["url"]] = {
+                            "status_code" : result["status_code"],
+                            "headers" : result["headers"],
+                            "latency_info" : result["latency_ms"],
+                            "timestamps" : result["timestamps"]
+                        }
+            # servers reaction on the harmless request and tls checking on this request for waf and cdns 
+            async with self.sem:
+                tasks = [self.harmless_request(domain) for domain in self.wordlist]
+                all_result  = await asyncio.gather(*tasks)
+        except Exception as e:
+          print(f'There is exception in the run_scan in the method of the active waf :- {e}')
