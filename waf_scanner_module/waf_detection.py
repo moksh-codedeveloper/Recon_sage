@@ -1,3 +1,4 @@
+import datetime
 import ssl
 import asyncio
 import hashlib
@@ -287,4 +288,62 @@ class WafDetection:
             "aws": {
                 "matched_headers": aws_matched
             }
-        }
+       }
+
+class ActiveWafScan:
+    def __init__(self, target:str, json_file_name:str, json_file_path:str, wordlist:list):
+        self.target = target
+        self.json_file_name = json_file_name
+        self.json_file_path = json_file_path
+        if len(wordlist) <= 5:
+            self.wordlist = wordlist
+        else :
+            self.wordlist = wordlist[:5]
+        
+    async def probe_target(self, timeout, headers, params, domain):
+        try:
+          async with httpx.AsyncClient(timeout=timeout) as client:
+            sub_target = self.target + domain
+            resp = await client.get(sub_target, headers=headers, params=params)
+            return {
+                "url" : str(resp.url), 
+                "headers" : dict(resp.headers),
+                "status_code" : resp.status_code,
+                "latency_ms" : resp.elapsed.total_seconds(),
+                "timestamps" : datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            }
+        except Exception as e:
+            print(f"[-]Exceptions occured here :- {e}")
+            return {
+                "url" : "",
+                "headers" : {},
+                "status_code" : 0,
+                "latency_ms" : 0,
+                "timestamps" : datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),
+                "message" : f"There is some error which has occured here suggestion solve this and restart the scanning :- {e}"
+            }
+    
+    async def  harmless_request(self, timeout, domain):
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                sub_target = self.target + domain
+                resp = await client.get(sub_target)
+                return {
+                    "message" : "This scan batch got successful",
+                    "status_code" : resp.status_code,
+                    "url" : str(resp.url),
+                    "headers" : dict(resp.headers),
+                    "tls_info" : {},
+                    "latency_ms" : resp.elapsed.total_seconds(),
+                    "timestamps" :  datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                }
+        except Exception as e:
+            print(f"DEBUG there is scan exception in the harmless request in here :- {e}")
+            return {
+                "message" : f"there is exception here in the harmless request method :- {e}",
+                "url" : "",
+                "headers" : {},
+                "status_code" : 0,
+                "latency_ms" : 0,
+                "timestamps" : datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            }
