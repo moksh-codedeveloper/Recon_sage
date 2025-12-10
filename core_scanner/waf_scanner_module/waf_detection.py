@@ -327,36 +327,47 @@ class ActiveWafScan:
                 "timestamps" : datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),
                 "message" : f"There is some error which has occured here suggestion solve this and restart the scanning :- {e}"
             }
-    
     async def  harmless_request(self, domain):
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 sub_target = self.target + domain
                 resp = await client.get(sub_target)
+                stream = resp.extensions.get("network_stream")
+                if not stream:
+                    return {}
+                ssl_object = stream.get_extra_info("ssl_object")
+                if not isinstance(ssl_object, (ssl.SSLSocket, ssl.SSLObject)):
+                    return {}
                 return {
                     "message" : "This scan batch got successful",
                     "status_code" : resp.status_code,
                     "url" : str(resp.url),
                     "headers" : dict(resp.headers),
-                    "tls_info" : {},
+                    "tls_version" : ssl_object.version(),
+                    "tls_cipher" : ssl_object.cipher(),
+                    "tls_cert" : ssl_object.getpeercert(),
                     "latency_ms" : resp.elapsed.total_seconds(),
                     "timestamps" :  datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
                 }
         except Exception as e:
             print(f"DEBUG there is scan exception in the harmless request in here :- {e}")
             return {
-                "message" : f"there is exception here in the harmless request method :- {e}",
+                "message" : f"There is exception here in the harmless request method :- {e}",
                 "url" : "",
                 "headers" : {},
                 "status_code" : 0,
                 "latency_ms" : 0,
-                "timestamps" : datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                "timestamps" : datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),
+                "tls_version" : None,
+                "tls_cipher": None,
+                "tls_cert" : None
             }
-    async def run_scan(self, concurrency, headers, timeout, params):
+    async def check_for_waf_status_code(self):
         target_result = {}
         status_code_for_waf = [406, 419, 420,  429, 444, 450, 494, 499, 510, 521, 522, 523, 525, 526, 530]
         try:
-            # target fingerprinting of the on-purpose harmful request (To see the server reaction)
+            urls_with_status_code_detected_waf = {}
+            all_urls_has_the_status_code = []
             async with self.sem:
                 tasks = [self.probe_target(domain) for domain in self.wordlist]
                 all_result = await asyncio.gather(*tasks)
@@ -368,9 +379,21 @@ class ActiveWafScan:
                             "latency_info" : result["latency_ms"],
                             "timestamps" : result["timestamps"]
                         }
-            # servers reaction on the harmless request and tls checking on this request for waf and cdns 
-            async with self.sem:
-                tasks = [self.harmless_request(domain) for domain in self.wordlist]
-                all_result  = await asyncio.gather(*tasks)
+                        urls_with_status_code_detected_waf[result["url"]] = result["status_code"]
+                        all_urls_has_the_status_code.append(result["url"])
+
+            logger_obj = JSONLogger(json_file_name=self.json_file_name, json_file_path=self.json_file_path)
+            logs_for_json_file = {
+                "message" : "This is the file report with the detailed data",
+                "target_result" : target_result,
+            }
+            logger_obj.log_to_file(logs_for_json_file)
+            return {
+                "message" : "This is generated summary from the data came from the server",
+                "target_result" : len(target_result),
+                "log_infos" : "Check the result logs in the form json",
+                "length_of_urls_list_has_the_waf_status_code" : len(all_urls_has_the_status_code),
+                "more_detailed_data" : urls_with_status_code_detected_waf
+            }
         except Exception as e:
           print(f'There is exception in the run_scan in the method of the active waf :- {e}')
