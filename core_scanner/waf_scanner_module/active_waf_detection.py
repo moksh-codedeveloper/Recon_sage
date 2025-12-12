@@ -2,7 +2,7 @@ import httpx
 import ssl
 
 class ActiveWafScan:
-    def __init__(self, timeout, concurrency, target:str, json_file_name:str, json_file_path:str, wordlist:list, headers:dict, params:str):
+    def __init__(self, timeout:int, concurrency:int, target:str, json_file_name:str, json_file_path:str, wordlist:list, headers:dict, params:str):
         self.target = target
         self.json_file_name = json_file_name
         self.json_file_path = json_file_path
@@ -113,3 +113,37 @@ class ActiveWafScan:
             "length_of_urls_list_has_the_waf_status_code" : 0,
             "more_detailed_data" : {}
           }
+        
+        def _extract_tls_info(self, response):
+            """Extract TLS/SSL information from response"""
+            try:
+                stream = response.extensions.get("network_stream")
+                if not stream:
+                    return {}
+
+                ssl_object = stream.get_extra_info("ssl_object")
+                if not isinstance(ssl_object, (ssl.SSLSocket, ssl.SSLObject)):
+                    return {}
+                tls_version = ssl_object.version() 
+                cipher_suite = ssl_object.cipher()
+                certficate = ssl_object.getpeercert()
+                issuer = certficate["issuer"]
+                san = certficate["subjectAltName"]
+                subject = certficate["subject"]
+                serial_num = certficate["serialNumber"]
+                not_before  = certficate["notBefore"]
+                not_after = certficate["notAfter"]
+                return {
+                    "tls_version": tls_version,
+                    "cipher_suite": cipher_suite,
+                    "certificate": certficate,
+                    "issuer" : issuer,
+                    "san" : san,
+                    "subject" : subject,
+                    "serial_number" : serial_num,
+                    "not_before" : not_before,
+                    "not_after" : not_after,
+                    "message" : "This is the most detailed tls_info you  can ever get now go ahead and lighten up the hidden truth do this have the waf or not ??"
+                }
+            except Exception:
+                return {}
