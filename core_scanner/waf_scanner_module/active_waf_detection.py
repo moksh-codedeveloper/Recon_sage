@@ -16,6 +16,50 @@ class ActiveWafScan:
         self.timeout = timeout
         self.sem = asyncio.Semaphore(self.concurrency)
 
+        def _extract_tls_info(self, response:httpx.Response):
+            """Extract TLS/SSL information from response"""
+            try:
+                stream = response.extensions.get("network_stream")
+                if not stream:
+                    return {}
+
+                ssl_object = stream.get_extra_info("ssl_object")
+                if not isinstance(ssl_object, (ssl.SSLSocket, ssl.SSLObject)):
+                    return {}
+                tls_version = ssl_object.version() 
+                cipher_suite = ssl_object.cipher()
+                certficate = ssl_object.getpeercert()
+                issuer = certficate["issuer"]
+                san = certficate["subjectAltName"]
+                subject = certficate["subject"]
+                serial_num = certficate["serialNumber"]
+                not_before  = certficate["notBefore"]
+                not_after = certficate["notAfter"]
+                return {
+                    "tls_version": tls_version,
+                    "cipher_suite": cipher_suite,
+                    "certificate": certficate,
+                    "issuer" : issuer,
+                    "san" : san,
+                    "subject" : subject,
+                    "serial_number" : serial_num,
+                    "not_before" : not_before,
+                    "not_after" : not_after,
+                    "message" : "This is the most detailed tls_info you  can ever get now go ahead and lighten up the hidden truth do this have the waf or not ??"
+                }
+            except Exception as e:
+                return {
+                    "tls_version" : None,
+                    "cipher_suite" : None,
+                    "certificate" : None,
+                    "issuer" : None,
+                    "san" : None,
+                    "subject" : None,
+                    "serial_number" : None,
+                    "not_before" : None,
+                    "not_after" : None,
+                    "message" : f"This is the exception occured in the batch of request {e}"
+                }
     async def probe_target(self, domain):
         try:
           async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -43,22 +87,15 @@ class ActiveWafScan:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 sub_target = self.target + domain
                 resp = await client.get(sub_target)
-                stream = resp.extensions.get("network_stream")
-                if not stream:
-                    return {}
-                ssl_object = stream.get_extra_info("ssl_object")
-                if not isinstance(ssl_object, (ssl.SSLSocket, ssl.SSLObject)):
-                    return {}
+                tls_info = self._extract_tls_info(response=resp)
                 return {
                     "message" : "This scan batch got successful",
                     "status_code" : resp.status_code,
                     "url" : str(resp.url),
                     "headers" : dict(resp.headers),
-                    "tls_version" : ssl_object.version(),
-                    "tls_cipher" : ssl_object.cipher(),
-                    "tls_cert" : ssl_object.getpeercert(),
                     "latency_ms" : resp.elapsed.total_seconds(),
-                    "timestamps" :  datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                    "timestamps" :  datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),
+                    "tls_info" : tls_info
                 }
         except Exception as e:
             print(f"DEBUG there is scan exception in the harmless request in here :- {e}")
@@ -68,10 +105,7 @@ class ActiveWafScan:
                 "headers" : {},
                 "status_code" : 0,
                 "latency_ms" : 0,
-                "timestamps" : datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),
-                "tls_version" : None,
-                "tls_cipher": None,
-                "tls_cert" : None
+                "timestamps" : datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
             }
     async def check_for_waf_status_code(self):
         target_result = {}
@@ -113,37 +147,3 @@ class ActiveWafScan:
             "length_of_urls_list_has_the_waf_status_code" : 0,
             "more_detailed_data" : {}
           }
-        
-        def _extract_tls_info(self, response):
-            """Extract TLS/SSL information from response"""
-            try:
-                stream = response.extensions.get("network_stream")
-                if not stream:
-                    return {}
-
-                ssl_object = stream.get_extra_info("ssl_object")
-                if not isinstance(ssl_object, (ssl.SSLSocket, ssl.SSLObject)):
-                    return {}
-                tls_version = ssl_object.version() 
-                cipher_suite = ssl_object.cipher()
-                certficate = ssl_object.getpeercert()
-                issuer = certficate["issuer"]
-                san = certficate["subjectAltName"]
-                subject = certficate["subject"]
-                serial_num = certficate["serialNumber"]
-                not_before  = certficate["notBefore"]
-                not_after = certficate["notAfter"]
-                return {
-                    "tls_version": tls_version,
-                    "cipher_suite": cipher_suite,
-                    "certificate": certficate,
-                    "issuer" : issuer,
-                    "san" : san,
-                    "subject" : subject,
-                    "serial_number" : serial_num,
-                    "not_before" : not_before,
-                    "not_after" : not_after,
-                    "message" : "This is the most detailed tls_info you  can ever get now go ahead and lighten up the hidden truth do this have the waf or not ??"
-                }
-            except Exception:
-                return {}
