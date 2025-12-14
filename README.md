@@ -1,8 +1,259 @@
 # ReconSage
 
-![Version](https://img.shields.io/badge/version-1.1.5-blue)
+![Version](https://img.shields.io/badge/version-1.9-blue)
 ![Python](https://img.shields.io/badge/python-3.11-green)
-![Docker pulls](https://img.shields.io/badge/docker%20pulls-50+-orange)
+![Docker pulls](https://img.shields.io/badge/docker%20pulls-85+-orange)
 
-A fast, opinionated asynchronous directory/subdomain enumerator and HTTP recon tool built with FastAPI + httpx. Designed for **authorized security testing**, ReconSage focuses on speed, simple JSON logs and post-scan false-positive heuristics.
+ReconSage is an asynchronous reconnaissance framework focused on **signal quality** rather than raw speed.  
+It combines subdirectory discovery with WAF awareness, rate-limit detection, and false-positive reduction into a single, feedback-driven workflow.
+
+---
+
+## What is ReconSage?
+
+ReconSage is **not just a directory brute-forcer**.
+
+It is a backend-first reconnaissance system designed to observe **how a server behaves under controlled pressure**, then reuse those observations to reduce noise in later scans.
+
+Most tools treat:
+- directory scanning  
+- WAF detection  
+- rate limiting  
+- false positives  
+
+as separate problems.
+
+ReconSage treats them as **dependent signals**.
+
+---
+
+## Core Design Philosophy
+
+ReconSage is built on three principles:
+
+### 1. Signal > Volume
+Sending more requests does not guarantee better results.  
+ReconSage prioritizes **response behavior**, not request count.
+
+### 2. Feedback-Driven Scanning
+Outputs from one phase (status codes, headers, body hashes, timing) are reused as **inputs** for later phases.
+
+Logs are not dead artifacts — they are part of the scanning pipeline.
+
+### 3. Explicit Risk Ownership
+ReconSage does not attempt to hide its activity by default.
+If a defense is triggered, that behavior is considered **valuable information**, not failure.
+
+---
+
+## Current Features (v1.9)
+
+### Subdirectory Scanner
+- Fully async, HTTPX-based
+- Adaptive concurrency using AIMD
+- Supports dual wordlists
+- Designed to surface behavioral anomalies, not just `200 OK`
+
+### Passive WAF Detection
+- TLS and certificate fingerprinting
+- Confidence-based matching (not hard rules)
+- Designed to avoid false certainty
+
+### Rate-Limit Detection
+- Identifies soft and hard limits
+- Works on real production APIs (e.g. GitHub)
+- Separates warm-up traffic from detection traffic
+
+### False-Positive Detection
+- Hash-based response comparison
+- Uses scanner output as input
+- Designed to eliminate “fake 200s” and wildcard responses
+
+### Structured JSON Logging
+- All modules emit structured logs
+- Logs are reusable across modules
+- Path handling is resilient by design
+
+---
+
+## What ReconSage Does NOT Do
+
+ReconSage is **not**:
+- an exploit framework  
+- a vulnerability scanner  
+- a WAF bypass tool  
+- a stealth-by-default scanner  
+
+It is a **reconnaissance and observation tool**.
+
+If you want exploitation or automation, this is intentionally not that.
+
+---
+
+## Architecture
+
+ReconSage currently operates in **backend mode**, exposing functionality through HTTP endpoints.
+
+Planned architecture:
+1. Backend mode (stable)
+2. CLI mode (interactive, user-driven decisions)
+
+The CLI will act as an intelligent control layer over the backend.
+
+---
+
+## Available Endpoints
+
+1. `/scan`  
+   Main subdirectory scanner
+
+2. `/rate/limit`  
+   Rate-limit detection module
+
+3. `/waf/scan`  
+   WAF detection (passive, active in progress)
+
+4. `/false/positive`  
+   False-positive detection module
+
+---
+
+## Sample Requests
+
+`/scan`
+```json
+{
+  "target": "http://testphp.vulnweb.com/",
+  "wordlist": "/usr/share/seclists/Fuzzing/fuzz-Bo0oM-friendly.txt",
+  "wordlist_2": "/usr/share/seclists/Fuzzing/fuzz-Bo0oM.txt",
+  "json_file_name": "recon_sage_logs.json",
+  "json_file_path": "ReconSage_logs",
+  "concurrency": 100,
+  "timeout": 10
+}
+````
+
+---
+
+`/rate/limit`
+
+```json
+{
+  "target": "https://api.github.com/",
+  "json_file_name": "rate_limit.json",
+  "json_file_path": "rate_limit_logs",
+  "domains": [],
+  "user_paths": [],
+  "concurrency": 5,
+  "timeout": 10
+}
+```
+
+---
+
+`/waf/scan`
+
+```json
+{
+  "target": "https://github.com/",
+  "wordlist": ["", "about", "explore", "pricing"],
+  "json_file_name": "waf_scan.json",
+  "json_file_path": "waf_logs",
+  "concurrency": 100,
+  "timeout": 10
+}
+```
+
+---
+
+`/false/positive`
+
+```json
+{
+  "target": "http://testphp.vulnweb.com/",
+  "json_file_name": "false_positive.json",
+  "json_full_path": "False_Detector",
+  "timeout": 10,
+  "concurrency": 100,
+  "json_file_to_read": "/home/<user>/ReconSage_logs/recon_sage_logs.json",
+  "list_of_targets": ["", "favicon.ico", ".git/", "logs/"]
+}
+```
+
+---
+
+## Important Notes
+
+* Some parameters (domains, wordlists, paths) are used by internal warm-up logic to calculate safe concurrency and timeout values.
+* Rate-limit detection separates:
+  * wordlist used for AIMD calibration
+  * wordlist used for actual detection
+* False-positive detection **must** consume logs generated by the main scanner.
+
+Passing arbitrary JSON files will fail by design.
+
+---
+
+## Active WAF Detection (Status)
+
+Active WAF detection exists only in the WAF module and is **still under development**.
+
+It intentionally triggers defensive behavior to observe:
+
+* status code anomalies
+* response timing changes
+* TLS and connection behavior
+
+Use responsibly.
+
+---
+
+## Roadmap
+
+* Active WAF detection completion
+* Akamai / Imperva / AWS / CloudFront models
+* Interactive CLI with decision points
+* Optional Tor-based request routing (CLI-only)
+
+---
+
+## Intended Audience
+
+ReconSage is built for:
+
+* infrastructure researchers
+* advanced bug bounty hunters
+* people who care about false positives
+* users comfortable with async tooling and responsibility
+
+If you are looking for plug-and-play exploitation, this is not the right tool.
+
+---
+
+## Ethics & Responsibility
+
+ReconSage exposes behavior — it does not justify misuse.
+
+You control:
+
+* concurrency
+* targets
+* intensity
+
+You own the consequences.
+
+---
+
+## Credits
+
+* Coffee
+* A laptop
+* Unlimited curiosity
+
+---
+
+## Final Note
+
+> “Good reconnaissance is not about speed.
+> It’s about understanding how a system reacts.”
 
