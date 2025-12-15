@@ -7,7 +7,7 @@ from core_scanner.main_scanner import Scanner
 import uvicorn
 from core_scanner.rate_limiting import RateLimitDetector
 from core_scanner.target_fingerprinting import WarmUpModel
-from waf_scanner_module.waf_detection import WafDetection
+from core_scanner.waf_scanner_module.passive_waf_detection import WafDetection
 from Backend_part.models_for_main import Target
 from Backend_part.models_for_main import RateLimit
 from Backend_part.models_for_main import WafModel 
