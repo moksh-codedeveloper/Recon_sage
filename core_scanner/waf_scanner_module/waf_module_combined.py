@@ -28,14 +28,12 @@ class WafModel:
                             "cipher_suite": cipher_info[0] if cipher_info else None,
                             "cert": ssl_object.getpeercert()
                         }
-
             return {
                 "status_code": resp.status_code,
                 "headers": dict(resp.headers),
                 "url": str(resp.url),
                 "tls_info": tls_info
             }
-
         except Exception as e:
             print(f"There is exception here :- {e}")
             return {
@@ -45,27 +43,28 @@ class WafModel:
                 "tls_info": {},
                 "message": f"WAF module error :- {e}"
             }
-
-
-
-
-async def main():
-    print("======= Scan Report and summary here we go from here to there ======")
-    target = "https://google.com/"
-    wordlist = ["", "admin", "profile"]
-    json_file_name = "research_data.json"
-    json_file_path = "research_purpose_data"
-    json_logger_obj = JSONLogger(json_file_name=json_file_name, json_file_path=json_file_path)
-    log_for_scans = {}
-    waf_model_obj = WafModel(target=target, lists_of_words=wordlist, concurrency=100, timeout=10)
-    for domain in wordlist:
-        scan_result = await waf_model_obj.recon_info(domain)
     
-    for key, values in scan_result.items():
-        log_for_scans[key] = values
-
-    json_logger_obj.log_to_file(logs=log_for_scans)
-    
-    await waf_model_obj.__aclose__()
-
-asyncio.run(main())
+    def status_codes_analysis(self, all_status_code_list:list):
+        direct_status_codes_occured_in_waf = []
+        waf_status_code = [409, 405, 444, 429, 990, 900, 406, 401, 404, 403]
+        for curr in all_status_code_list:
+            if curr  in waf_status_code:
+                direct_status_codes_occured_in_waf.append(curr)
+        
+        server_error_redirect_error_status_codes = []
+        firewall_error_codes_other_codes = []
+        for curr in all_status_code_list:
+            if curr >= 500 and curr < 600:
+                server_error_redirect_error_status_codes.append(curr)
+            
+            if curr >= 300  and curr < 400:
+                server_error_redirect_error_status_codes.append(curr)
+            
+            if curr >= 900:
+                firewall_error_codes_other_codes.append(curr)
+        return {
+            "message" : "Here are the findings from the scan  on your status codes list",
+            "direct_status_code_analysis" : direct_status_codes_occured_in_waf,
+            "server_error_redirect_codes" : server_error_redirect_error_status_codes,
+            "firewall_error_and_other_codes" : firewall_error_codes_other_codes
+        }
