@@ -1,6 +1,6 @@
 # core_scanner/rate_limiting.py
 
-from core_scanner.target_fingerprinting import PassiveFingerprint
+from .target_fingerprinting import PassiveFingerprint
 import asyncio 
 from .json_logger import JSONLogger
 

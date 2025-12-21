@@ -2,7 +2,7 @@
 import datetime
 import asyncio
 import os
-from core_scanner.target_fingerprinting import PassiveFingerprint
+from .target_fingerprinting import PassiveFingerprint
 from .json_logger import JSONLogger
 
 class Scanner:

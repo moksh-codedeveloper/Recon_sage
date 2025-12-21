@@ -12,11 +12,10 @@ class FalseDetectorModel(BaseModel):
 
 class WafModel(BaseModel):
     target:str
-    wordlist:list
-    json_file_name:str
-    json_file_path:str
+    list_of_words:list
     concurrency:int
     timeout:int
+    headers:dict
 
 class RateLimit(BaseModel):
     target: str
