@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # main.py
 from .core_scanner.false_limit_detection import FalseDetector
 import statistics
