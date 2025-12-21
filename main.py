@@ -1,17 +1,17 @@
 #!/usr/bin/env python
 # main.py
-from .core_scanner.false_limit_detection import FalseDetector
+from core_scanner.false_limit_detection import FalseDetector
 import statistics
 from fastapi import FastAPI
-from .core_scanner.waf_scanner_module.waf_module_combined import WafDetectionModel
-from .core_scanner.main_scanner import Scanner
+from core_scanner.waf_scanner_module.waf_module_combined import WafDetectionModel
+from core_scanner.main_scanner import Scanner
 import uvicorn
-from .core_scanner.rate_limiting import RateLimitDetector
-from .core_scanner.target_fingerprinting import WarmUpModel
-from .models_for_main import Target
-from .models_for_main import RateLimit
-from .models_for_main import WafModel 
-from .models_for_main import FalseDetectorModel
+from core_scanner.rate_limiting import RateLimitDetector
+from core_scanner.target_fingerprinting import WarmUpModel
+from models_for_main import Target
+from models_for_main import RateLimit
+from models_for_main import WafModel 
+from models_for_main import FalseDetectorModel
 
 app = FastAPI(title="ReconSage V1.1.5")
 

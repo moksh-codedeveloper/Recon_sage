@@ -2,7 +2,7 @@ import asyncio
 import hashlib
 import json
 import httpx
-from .json_logger import JSONLogger
+from core_scanner.json_logger import JSONLogger
 class FalseDetector:
     def __init__(self, target, json_file_name, json_file_path, concurrency, timeout):
         self.target = target

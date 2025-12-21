@@ -1,8 +1,8 @@
 # core_scanner/rate_limiting.py
 
-from .target_fingerprinting import PassiveFingerprint
+from core_scanner.target_fingerprinting import PassiveFingerprint
 import asyncio 
-from .json_logger import JSONLogger
+from core_scanner.json_logger import JSONLogger
 
 class RateLimitDetector:
     def __init__(self, target, list_dirs, concurrency, timeout, json_file_path, json_file_name):

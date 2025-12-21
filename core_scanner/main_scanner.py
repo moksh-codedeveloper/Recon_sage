@@ -2,8 +2,8 @@
 import datetime
 import asyncio
 import os
-from .target_fingerprinting import PassiveFingerprint
-from .json_logger import JSONLogger
+from core_scanner.target_fingerprinting import PassiveFingerprint
+from core_scanner.json_logger import JSONLogger
 
 class Scanner:
     def __init__(self, target, json_file_name, json_file_path):

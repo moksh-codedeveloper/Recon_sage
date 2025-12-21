@@ -13,4 +13,5 @@ result_log/**/*.json
 research_docs/
 !README.md
 app_test_logs/
-reconsage_logs/
+reconsage_logs/__pycache__/
+*.pyc

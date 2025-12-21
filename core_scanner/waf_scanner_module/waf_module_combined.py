@@ -1,6 +1,6 @@
 import httpx, asyncio 
 import ssl
-from ..json_logger import JSONLogger
+from core_scanner.json_logger import JSONLogger
 import statistics
 
 class WafDetectionModel:

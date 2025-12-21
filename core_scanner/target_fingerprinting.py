@@ -1,7 +1,7 @@
 # core_scanner/target_fingerprinting.py
 import hashlib
 import httpx
-from .aimd_currency_governor import AIMDConcurrencyDataGather
+from core_scanner.aimd_currency_governor import AIMDConcurrencyDataGather
 class PassiveFingerprint:
     def __init__(self, target, timeout, concurrency):
         self.target = target.rstrip("/")
