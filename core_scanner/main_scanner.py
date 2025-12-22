@@ -99,6 +99,5 @@ class Scanner:
               "error_list_urls" : 0,
               "server_error_list_urls" : 0,
               "redirect_list" : 0,
-              "more_detailed_scanned_result" : {},
-              "status_code" : 0,
+              "status_code" : 0
           }
