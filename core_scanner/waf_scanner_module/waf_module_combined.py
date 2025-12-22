@@ -105,10 +105,10 @@ class WafDetectionModel:
             "all_status_code" : all_status_code
         }
 
-    async def passive_main_scan(self):
+    async def passive_main_scan(self, json_file_name:str, json_file_path:str):
         async with self.sem :
             result_scan = await self.full_recon_scan()
-        
+        logger_obj = JSONLogger(json_file_name=json_file_name, json_file_path=json_file_path)
         latencies_list = result_scan["all_latencies"]
         status_code_list = result_scan["all_status_code"]
 
@@ -141,11 +141,20 @@ class WafDetectionModel:
             "server_error_redirect_codes" : server_error_redirect_codes,
             "firewall_error_and_other_codes" : firewall_error_and_other_codes
         }
+        log_to_file_passive_scan_output = {
+            "result" : result,
+            "waf_scores" : {
+                "waf_score_status_code_analysis" : waf_score_based_status_code,
+                "waf_score_latency_analysis" : waf_score_based_latencies
+            },
+            "list_of_latencies" : latencies_list,
+            "list_of_status_code" : status_code_list,
+        }
+        logger_obj.log_to_file(logs=log_to_file_passive_scan_output)
         return{
-            "message" : "Here is the detailed report on our analysis by our two of the OG detectors",
+            "message" : "Here is the detailed report on our analysis by our two of the OG detectors this is just summary so please check out the reports of json_file",
             "waf_score_based_on_status_codes" : waf_score_based_status_code,
             "waf_score_based_on_latencies" : waf_score_based_latencies,
-            "all_metrices" : result
         }
 
     async def active_probing(self, headers:dict, urls:str):

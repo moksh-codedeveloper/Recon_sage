@@ -16,6 +16,8 @@ class WafModel(BaseModel):
     concurrency:int
     timeout:int
     headers:dict
+    json_file_name:str
+    json_file_path:str
 
 class RateLimit(BaseModel):
     target: str

@@ -89,7 +89,6 @@ class Scanner:
                 "error_list_urls" : len(error_list),
                 "server_error_list_urls" : len(server_error_list),
                 "redirect_list" : len(redirect_list),
-                "more_detailed_scanned_result" : result,
                 "status_code" : 200
             }
         except Exception as e:

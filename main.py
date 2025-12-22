@@ -80,7 +80,7 @@ async def waf_scan(waf_scan_model:WafModel):
         timeout=waf_scan_model.timeout,
         lists_of_words=waf_scan_model.list_of_words
     )
-    passive_scan_result = await waf_detection_obj.passive_main_scan()
+    passive_scan_result = await waf_detection_obj.passive_main_scan(json_file_name=waf_scan_model.json_file_name, json_file_path=waf_scan_model.json_file_path)
     active_scan_result = await waf_detection_obj.main_active_scan_(
         headers=waf_scan_model.headers
     )
