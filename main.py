@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from core_scanner.waf_scanner_module.waf_module_combined import WafDetectionModel
 from core_scanner.main_scanner import Scanner
 import uvicorn
-from core_scanner.rate_limiting import RateLimitDetector
+from core_scanner.rate_limiting import RateLimitDetection
 from core_scanner.target_fingerprinting import WarmUpModel
 from models_for_main import Target
 from models_for_main import RateLimit
@@ -88,44 +88,6 @@ async def waf_scan(waf_scan_model:WafModel):
         "passive_scan_result" : passive_scan_result,
         "active_scan_result" : active_scan_result
     }
-@app.post("/rate/limit")
-async def scan_for_rate_limits(rate_limit: RateLimit):
-    try:
-        warmup_model = WarmUpModel()
-        scan_result = await warmup_model.benign_request(
-            target=rate_limit.target, 
-            domains=rate_limit.domains, 
-            concurrency=rate_limit.concurrency, 
-            timeout=rate_limit.timeout
-        )
-        
-        concurrency_rate = scan_result.get("calculated_concurrency", [])
-        timeout_rate = scan_result.get("calculated_timeout", [])
-        
-        # Safe median with defaults
-        concurrency = int(statistics.median(concurrency_rate)) if concurrency_rate else rate_limit.concurrency
-        timeout = int(statistics.median(timeout_rate)) if timeout_rate else rate_limit.timeout
-    
-        rate_limit_scanner = RateLimitDetector(
-            target=rate_limit.target,
-            timeout=timeout,
-            concurrency=concurrency,
-            json_file_name=rate_limit.json_file_name,
-            json_file_path=rate_limit.json_file_path,
-            list_dirs=rate_limit.user_paths  # 50 requests - will trigger GitHub's 60/hour limit
-        )
-        
-        batch_result = await rate_limit_scanner.scan_batch()
-        detect_rate_limit_result = rate_limit_scanner.detect_rate_limited(batch=batch_result)
-        
-        return detect_rate_limit_result
-    
-    except Exception as e:
-        return {
-            "error": str(e),
-            "message": "Rate limit scan failed",
-            "success": False
-        }
 
 @app.post("/false/positive")
 async def scan(false_detector_model:FalseDetectorModel):
@@ -166,5 +128,34 @@ async def scan(false_detector_model:FalseDetectorModel):
         "timeout_rate" : timeout_rate
     }
 
+@app.post("/rate/limit")
+async def main_rate_limit_scan(rate_limit_model:RateLimit):
+    
+    warmup_model = WarmUpModel()
+    
+    benign_request  = await warmup_model.benign_request(target=rate_limit_model.target, domains=rate_limit_model.domains, concurrency=rate_limit_model.concurrency, timeout=rate_limit_model.timeout)
+    
+    list_of_concurrency = benign_request["calculated_concurrency"]
+    list_of_timeout = benign_request["calculated_timeout"]
+    
+    concurrency = 100
+    timeout = 10
+    if list_of_concurrency and len(list_of_concurrency) > 0:
+        concurrency = statistics.median(list_of_concurrency)
+    if list_of_timeout and len(list_of_timeout) > 0:
+        timeout = statistics.median(list_of_timeout)
+    
+    if len(rate_limit_model.user_paths) < 10:
+        raise ValueError("Scanner needs more than 10 user paths to perform accurate scans")
+    rate_limit_model_obj = RateLimitDetection(
+        target=rate_limit_model.target,
+        concurrency=concurrency,
+        timeout=timeout,
+        user_paths=rate_limit_model.user_paths,
+        json_file_name=rate_limit_model.json_file_name,
+        json_file_path=rate_limit_model.json_file_path
+    )
+    main_scan_result = await rate_limit_model_obj.main_scan()
+    return main_scan_result
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)
